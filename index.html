@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Control de Planos Pendientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .glass-panel { background: rgba(255, 255, 255, 0.98); border: 1px solid #e2e8f0; }
+        .kpi-card { transition: all 0.2s ease-in-out; cursor: pointer; }
+        .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+        .badge-fuera { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; min-width: 110px; display: inline-block; text-align: center; }
+        .badge-dentro { background-color: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; min-width: 110px; display: inline-block; text-align: center; }
+        .tab-btn.active { background-color: #2563eb; color: #ffffff; font-weight: 700; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2); }
+        
+        table { table-layout: fixed; width: 100%; }
+        th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th { position: relative; user-select: none; }
+        th:hover { filter: brightness(0.9); cursor: grab; }
+        th:active { cursor: grabbing; }
+        .resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; user-select: none; touch-action: none; z-index: 10; }
+        .resizer:hover, .resizing { background-color: #60a5fa; }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .summary-spinner { width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #7c3aed; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes slideUpToast { from { transform: translate(-50%, 30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-lg">
+        <div class="max-w-[96rem] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-md"><i data-lucide="folder-clock" class="w-6 h-6 text-white"></i></div>
+                <div>
+                    <h1 class="font-bold text-lg leading-snug tracking-tight">Control de Planos Pendientes</h1>
+                    <p class="text-xs text-slate-400">Sistema Dinámico de Monitoreo de Aprobaciones</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="btnSummary" onclick="openSummaryModal()" title="Generar resumen PNG de alta calidad"
+                        class="cursor-pointer bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                    <i data-lucide="image-down" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Resumen PNG</span>
+                </button>
+                <button id="btnRefresh" onclick="loadFromGoogleSheet(true)" title="Sincronizar con Google Sheets"
+                        class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Actualizar</span>
+                </button>
+                <label for="excelFile" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                    <i data-lucide="file-up" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Subir Excel</span>
+                </label>
+                <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden">
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-[96rem] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Banner Info -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-100 p-2 rounded-lg"><i data-lucide="clock" class="w-5 h-5 text-amber-700"></i></div>
+                <div>
+                    <span class="text-xs text-slate-500 font-medium uppercase tracking-wider block">Último corte registrado</span>
+                    <strong id="lblFechaCorte" class="text-base font-bold text-slate-900">--/--/---- --:--:--</strong>
+                </div>
+            </div>
+            <div class="flex flex-col items-end space-y-1">
+                <div class="flex items-center space-x-2 bg-slate-100 py-1.5 px-3.5 rounded-full text-xs font-semibold text-slate-600">
+                    <span id="statusIndicator" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                    <span id="lblStatusText">Sin información cargada</span>
+                </div>
+                <span id="lblLastUpdate" class="text-[10px] text-slate-400"></span>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex flex-wrap gap-2 bg-slate-200/80 p-1.5 rounded-2xl w-fit">
+            <button id="tab1Btn" onclick="switchTab('tab1')" class="tab-btn active px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>1. Reporte Jerárquico</span>
+            </button>
+            <button id="tab2Btn" onclick="switchTab('tab2')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                <i data-lucide="bar-chart-3" class="w-4 h-4"></i><span>2. Resumen General y Gráficos</span>
+            </button>
+            <button id="tab3Btn" onclick="switchTab('tab3')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                <i data-lucide="table" class="w-4 h-4"></i><span>3. Detalle Operativo</span>
+            </button>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div onclick="setPlazoFilter('ALL')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-blue-600">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Pendientes</p>
+                        <h3 id="kpiTotal" class="text-3xl font-extrabold text-slate-900 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="files" class="w-6 h-6"></i></div>
+                </div>
+                <p class="text-xs text-slate-500 mt-3 font-medium">Ver todos los trámites</p>
+            </div>
+            <div onclick="setPlazoFilter('Fuera de Plazo')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-red-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fuera de Plazo</p>
+                        <h3 id="kpiFueraPlazo" class="text-3xl font-extrabold text-red-600 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-red-50 text-red-600 rounded-xl"><i data-lucide="alert-circle" class="w-6 h-6"></i></div>
+                </div>
+                <p id="kpiPctFuera" class="text-xs text-red-600 font-bold mt-3">0% del total</p>
+            </div>
+            <div onclick="setPlazoFilter('Dentro de plazo')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-emerald-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dentro de Plazo</p>
+                        <h3 id="kpiDentroPlazo" class="text-3xl font-extrabold text-emerald-600 mt-1">0</h3>
+                    </div>
+                    <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
+                </div>
+                <p id="kpiPctDentro" class="text-xs text-emerald-600 font-bold mt-3">0% del total</p>
+            </div>
+            <div class="glass-panel p-5 rounded-2xl shadow-sm border-l-4 border-l-purple-600">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Monto Proyectado</p>
+                        <h3 id="kpiMontoTotal" class="text-2xl font-extrabold text-slate-900 mt-1">S/ 0.00</h3>
+                    </div>
+                    <div class="p-2.5 bg-purple-50 text-purple-600 rounded-xl"><i data-lucide="banknote" class="w-6 h-6"></i></div>
+                </div>
+                <p id="kpiMontoDetalle" class="text-xs text-slate-500 mt-3 font-medium">MT: S/ 0.0K | MO: S/ 0.0K</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+                    <span>Control de Filtrado Dinámico e Interconectado</span>
+                </h2>
+                <button id="btnReset" class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center space-x-1 transition">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i><span>Restablecer Filtros</span>
+                </button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Departamentos</label>
+                    <select id="filterDepto" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="ALL">Todos los Departamentos</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todas las Contratistas</label>
+                    <select id="filterContratista" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="ALL">Todas las Contratistas</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todos los Sup. Responsables</label>
+                    <select id="filterResponsable" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="ALL">Todos los Sup. Responsables</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todas las Condiciones</label>
+                    <select id="filterPlazo" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="ALL">Todas las Condiciones</option>
+                        <option value="Fuera de Plazo">Fuera de Plazo</option>
+                        <option value="Dentro de plazo">Dentro de plazo</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="noDataPlaceholder" class="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center space-y-4">
+            <div class="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600">
+                <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-800">Esperando datos de Google Sheets</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">El dashboard se sincroniza automáticamente con la hoja publicada. Si no carga, usa el botón "Actualizar" o sube el Excel manualmente.</p>
+        </div>
+
+        <!-- TAB 1: Reporte Jerárquico -->
+        <div id="tab1Content" class="hidden space-y-6">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="layout-grid" class="w-5 h-5 text-emerald-600"></i>
+                    <h3 class="text-sm font-bold text-slate-800">Reporte Jerárquico General</h3>
+                </div>
+                <div class="relative w-full sm:w-80">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                    <input type="text" id="searchInputHierarchical" placeholder="Buscar supervisor o departamento..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 rounded-xl border focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                </div>
+            </div>
+
+            <div id="hierarchicalSectionsContainer" class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+                <!-- Injected dynamically -->
+            </div>
+        </div>
+
+        <!-- TAB 2: Resumen General y Gráficos -->
+        <div id="tab2Content" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-600"></i>
+                        <span>Estado de Cumplimiento por Departamento</span>
+                    </h3>
+                    <div class="relative h-80"><canvas id="chartDepto"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+                        <span>Distribución de Planos por Contratista</span>
+                    </h3>
+                    <div class="relative h-80"><canvas id="chartContratista"></canvas></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <i data-lucide="coins" class="w-4 h-4 text-purple-600"></i>
+                        <span>Monto Proyectado por Departamento (S/)</span>
+                    </h3>
+                    <div class="relative h-80"><canvas id="chartMontoDepto"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <i data-lucide="wallet" class="w-4 h-4 text-purple-600"></i>
+                        <span>Top Contratistas por Monto Proyectado (S/)</span>
+                    </h3>
+                    <div class="relative h-80"><canvas id="chartMontoContra"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Detalle Operativo -->
+        <div id="tab3Content" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4 bg-slate-50/50">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="table" class="w-4 h-4 text-blue-600"></i>
+                        <h3 class="text-sm font-bold text-slate-800">Detalle Operativo de Requerimientos</h3>
+                    </div>
+                    <div class="relative w-full sm:w-80">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                        <input type="text" id="searchInputTab3" placeholder="Buscar SST, Contratista, Responsable..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 rounded-xl border focus:ring-blue-500 focus:border-blue-500 bg-white">
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="tableTab3" class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <!-- Cabeceras generadas dinámicamente para permitir reordenamiento -->
+                            <tr id="tableTab3TheadRow" class="text-white font-bold uppercase tracking-wider text-center text-[11px]"></tr>
+                        </thead>
+                        <tbody id="tableBodyTab3" class="divide-y divide-slate-100 text-slate-700 font-medium"></tbody>
+                    </table>
+                </div>
+                <div class="p-3 bg-slate-50 text-slate-500 text-xs flex justify-between items-center border-t border-slate-200">
+                    <span>Mostrando <strong id="lblCountRowsTab3">0</strong> trámites</span>
+                    <span class="text-[11px] text-slate-400">Arrastra los títulos para mover columnas | Arrastra bordes para ancho</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal Resumen -->
+    <div id="summaryModal" class="hidden fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-900 text-white">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="image" class="w-5 h-5"></i>
+                    <h2 class="font-bold text-sm">Vista previa del resumen</h2>
+                </div>
+                <button onclick="closeSummaryModal()" class="hover:bg-white/20 p-2 rounded-lg transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="summaryPreviewArea" class="overflow-auto flex-grow p-4" style="background:#e2e8f0; max-height:65vh;">
+                <div id="summaryCaptureWrapper"></div>
+            </div>
+            <div class="p-4 border-t bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div id="summaryStatus" class="text-sm font-medium text-slate-600"></div>
+                <div class="flex space-x-3">
+                    <button onclick="downloadSummaryPng()" id="btnDownloadSummary" disabled
+                            class="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-2.5 px-5 rounded-xl flex items-center space-x-2 transition shadow-md">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                        <span>Descargar PNG</span>
+                    </button>
+                    <button onclick="closeSummaryModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold py-2.5 px-5 rounded-xl transition">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // CONFIG & STATE
+        // ============================================================
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0rTTydjXTfHv0EnOhKmY0LzPrmaXAueCCvOgz12imqnF8_zNUOtyfuMUlLR70UEIEnkMl_v0135M3/pub?output=csv";
+        const AUTO_REFRESH_MINUTES = 5;
+        const FETCH_TIMEOUT_MS = 15000;
+        const COLOR_DARK_BLUE = '#2b308a'; // Color exacto de la imagen
+
+        let rawData = [];
+        let currentFilteredData = [];
+        let currentFechaCorte = "--/--/---- --:--:--";
+        let chartDeptoInstance = null;
+        let chartContratistaInstance = null;
+        let chartMontoDeptoInstance = null;
+        let chartMontoContraInstance = null;
+        let sortCol3 = ''; let sortAsc3 = true;
+        let isLoadingGS = false;
+        let _summaryReady = false;
+        let _summaryFilename = '';
+        let _summaryCancelled = false;
+        let _summaryCanvas = null;
+
+        let draggedCol = null;
+        let columnOrderTab3 = ['SST', 'Depto', 'Contratista', 'Responsable', 'Dias', 'MontoMT', 'MontoMO', 'Monto', 'Condicion'];
+        
+        const columnDefs = {
+            'SST': { label: 'Código SST', sortKey: 'SST', style: 'border-r border-blue-800' },
+            'Depto': { label: 'Departamento Operativo', sortKey: 'Depto', style: 'border-r border-blue-800' },
+            'Contratista': { label: 'Empresa Contratista', sortKey: 'Contratista', style: 'border-r border-blue-800' },
+            'Responsable': { label: 'Sup. Responsable', sortKey: 'Responsable', style: 'border-r border-blue-800' },
+            'Dias': { label: 'Días Pend.', sortKey: 'Dias', style: 'border-r border-blue-800' },
+            'MontoMT': { label: 'Monto Mat. (MT) (S/)', sortKey: 'MontoMT', style: 'border-r border-blue-800' },
+            'MontoMO': { label: 'Monto MO. (MO) (S/)', sortKey: 'MontoMO', style: 'border-r border-blue-800' },
+            'Monto': { label: 'Monto Total Proyectado (S/)', sortKey: 'Monto', style: 'border-r border-blue-800' },
+            'Condicion': { label: 'Condición Plazo', sortKey: 'Condicion', style: '' }
+        };
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            
+            document.getElementById('excelFile').addEventListener('change', handleFileUpload);
+            document.getElementById('filterDepto').addEventListener('change', () => onFilterChange('Depto'));
+            document.getElementById('filterContratista').addEventListener('change', () => onFilterChange('Contratista'));
+            document.getElementById('filterResponsable').addEventListener('change', () => onFilterChange('Responsable'));
+            document.getElementById('filterPlazo').addEventListener('change', () => onFilterChange('Plazo'));
+            
+            document.getElementById('searchInputTab3').addEventListener('input', applyFiltersAndRender);
+            document.getElementById('searchInputHierarchical').addEventListener('input', () => renderHierarchicalReport(currentFilteredData));
+            document.getElementById('btnReset').addEventListener('click', resetFilters);
+            
+            loadFromGoogleSheet();
+            if (AUTO_REFRESH_MINUTES > 0) setInterval(() => loadFromGoogleSheet(false), AUTO_REFRESH_MINUTES * 60 * 1000);
+        });
+
+        // ============================================================
+        // GOOGLE SHEETS LOADER
+        // ============================================================
+        async function loadFromGoogleSheet(manualTrigger = false) {
+            if (isLoadingGS) return;
+            isLoadingGS = true;
+            const statusText = document.getElementById('lblStatusText');
+            const statusIndicator = document.getElementById('statusIndicator');
+            const btn = document.getElementById('btnRefresh');
+            const icon = btn.querySelector('svg.lucide') || btn.querySelector('svg') || btn.querySelector('i');
+
+            if (manualTrigger) {
+                if (icon) icon.classList.add('spin');
+                btn.disabled = true;
+                statusText.innerText = 'Sincronizando con Google Sheets...';
+                statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+            }
+
+            try {
+                const url = GOOGLE_SHEET_CSV_URL + '&t=' + Date.now() + '&_=' + Math.random();
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+                let response;
+                try { response = await fetch(url, { cache: 'no-store', signal: controller.signal }); }
+                finally { clearTimeout(timeoutId); }
+
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const csvText = await response.text();
+                if (!csvText || csvText.trim().length === 0) throw new Error('CSV vacío. ¿Marcaste "Volver a publicar automáticamente"?');
+
+                const wb = XLSX.read(csvText, { type: 'string' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                processExcelRows(json);
+
+                if (rawData.length === 0) {
+                    statusText.innerText = 'CSV descargado pero sin cabeceras válidas.';
+                    statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+                } else {
+                    document.getElementById('lblLastUpdate').innerText = 'Actualizado: ' + new Date().toLocaleString('es-PE', { hour12: false });
+                }
+            } catch (error) {
+                console.error('[GS] Error:', error);
+                const msg = error.name === 'AbortError' ? 'Timeout: Google no respondió en 15s' : error.message;
+                statusText.innerText = 'Error: ' + msg;
+                statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+                if (rawData.length === 0) document.getElementById('noDataPlaceholder').classList.remove('hidden');
+            } finally {
+                isLoadingGS = false;
+                if (manualTrigger) {
+                    if (icon) icon.classList.remove('spin');
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+        function initResizers() {
+            document.querySelectorAll('table').forEach(table => {
+                table.querySelectorAll('th').forEach(th => {
+                    const resizer = th.querySelector('.resizer');
+                    if (!resizer) return;
+                    let x = 0, w = 0;
+                    resizer.addEventListener('mousedown', function (e) {
+                        e.stopPropagation();
+                        x = e.clientX; w = th.offsetWidth;
+                        th.classList.add('resizing');
+                        document.addEventListener('mousemove', mouseMoveHandler);
+                        document.addEventListener('mouseup', mouseUpHandler);
+                    });
+                    function mouseMoveHandler(e) { th.style.width = `${w + (e.clientX - x)}px`; }
+                    function mouseUpHandler() {
+                        th.classList.remove('resizing');
+                        document.removeEventListener('mousemove', mouseMoveHandler);
+                        document.removeEventListener('mouseup', mouseUpHandler);
+                    }
+                });
+            });
+        }
+
+        function switchTab(tabId) {
+            ['tab1', 'tab2', 'tab3'].forEach(id => {
+                document.getElementById(id + 'Btn').classList.remove('active');
+                document.getElementById(id + 'Content').classList.add('hidden');
+            });
+            document.getElementById(tabId + 'Btn').classList.add('active');
+            document.getElementById(tabId + 'Content').classList.remove('hidden');
+
+            if(tabId === 'tab1') renderHierarchicalReport(currentFilteredData);
+            if(tabId === 'tab2') renderCharts();
+            if(tabId === 'tab3') initResizers();
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames.includes('Base Datos') ? 'Base Datos' : workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                processExcelRows(json);
+                document.getElementById('lblLastUpdate').innerText = 'Actualizado (Excel manual): ' + new Date().toLocaleString('es-PE', { hour12: false });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function cleanCell(val) {
+            if (val === null || val === undefined) return '';
+            let s = String(val).trim();
+            s = s.replace(/^\uFEFF/, '').replace(/^"|"$/g, '').replace(/\r?\n/g, ' ').trim();
+            return s;
+        }
+
+        function processExcelRows(json) {
+            let extractedFecha = "";
+            if (json[1] && json[1][0] && /^Fecha\s*:/i.test(String(json[1][0]).trim())) {
+                extractedFecha = String(json[1][0]).trim().replace(/^Fecha:\s*/i, '').trim();
+            } else if (json[0] && json[0][0] && /^Fecha\s*:/i.test(String(json[0][0]).trim())) {
+                extractedFecha = String(json[0][0]).trim().replace(/^Fecha:\s*/i, '').trim();
+            }
+
+            let headerIdx = -1;
+            for (let i = 0; i < Math.min(10, json.length); i++) {
+                if (json[i] && (json[i].includes('SST') || json[i].includes('Departamento'))) { headerIdx = i; break; }
+            }
+            if (headerIdx === -1) { alert('No se encontró la cabecera del reporte.'); return; }
+
+            const headers = json[headerIdx].map(h => cleanCell(h));
+            const rows = json.slice(headerIdx + 1);
+            const sstCol = headers.indexOf('SST');
+            const deptoCol = headers.indexOf('Departamento');
+            const contraCol = headers.indexOf('Contratista');
+            const respCol = headers.indexOf('Responsable Tecsur');
+            const diasCol = headers.indexOf('Días pendientes Revisión 1');
+            const montoCol = headers.indexOf('Montos MT + MO Proyectados');
+            const mtCol = headers.indexOf('Monto MT Proyectado');
+            const moCol = headers.indexOf('Monto MO Proyectado');
+            const plazoCol = headers.indexOf('CORRESPONDE PLANO');
+
+            const parsedData = [];
+            rows.forEach(r => {
+                const deptoVal = cleanCell(r[deptoCol]) || 'SIN ASIGNAR';
+                if (deptoVal && deptoVal !== 'SIN ASIGNAR' && deptoVal !== 'nan' && (r[sstCol] || r[deptoCol])) {
+                    parsedData.push({
+                        SST: cleanCell(r[sstCol]) || 'N/A',
+                        Depto: deptoVal,
+                        Contratista: cleanCell(r[contraCol]) || 'SIN ASIGNAR',
+                        Responsable: cleanCell(r[respCol]) || 'SIN ASIGNAR',
+                        Dias: parseInt(cleanCell(r[diasCol])) || 0,
+                        Monto: parseFloat(cleanCell(r[montoCol])) || 0,
+                        MontoMT: parseFloat(cleanCell(r[mtCol])) || 0,
+                        MontoMO: parseFloat(cleanCell(r[moCol])) || 0,
+                        Condicion: cleanCell(r[plazoCol]) || 'Dentro de plazo'
+                    });
+                }
+            });
+
+            if (parsedData.length > 0) {
+                rawData = parsedData;
+                if (extractedFecha) {
+                    currentFechaCorte = extractedFecha;
+                    document.getElementById('lblFechaCorte').innerText = currentFechaCorte;
+                }
+                document.getElementById('statusIndicator').className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('noDataPlaceholder').classList.add('hidden');
+                document.getElementById('tab1Content').classList.remove('hidden');
+                resetFilters();
+            } else {
+                alert('El archivo se cargó pero no se encontraron filas con datos válidos.');
+            }
+        }
+
+        // ============================================================
+        // FILTERS
+        // ============================================================
+        function onFilterChange(src) { updateFilterDropdowns(rawData, src); applyFiltersAndRender(); }
+
+        function updateFilterDropdowns(baseData, changedSource) {
+            if (!baseData || baseData.length === 0) return;
+            const curD = document.getElementById('filterDepto').value;
+            const curC = document.getElementById('filterContratista').value;
+            const curR = document.getElementById('filterResponsable').value;
+            const curP = document.getElementById('filterPlazo').value;
+
+            const aD = baseData.filter(d => (curC === 'ALL' || d.Contratista === curC) && (curR === 'ALL' || d.Responsable === curR) && (curP === 'ALL' || d.Condicion === curP));
+            const aC = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curR === 'ALL' || d.Responsable === curR) && (curP === 'ALL' || d.Condicion === curP));
+            const aR = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curC === 'ALL' || d.Contratista === curC) && (curP === 'ALL' || d.Condicion === curP));
+            const aP = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curC === 'ALL' || d.Contratista === curC) && (curR === 'ALL' || d.Responsable === curR));
+
+            if (changedSource !== 'Depto') populateSelect('filterDepto', [...new Set(aD.map(d => d.Depto))].sort(), curD, 'Todos los Departamentos');
+            if (changedSource !== 'Contratista') populateSelect('filterContratista', [...new Set(aC.map(d => d.Contratista))].sort(), curC, 'Todas las Contratistas');
+            if (changedSource !== 'Responsable') populateSelect('filterResponsable', [...new Set(aR.map(d => d.Responsable))].sort(), curR, 'Todos los Sup. Responsables');
+            if (changedSource !== 'Plazo') populateSelect('filterPlazo', [...new Set(aP.map(d => d.Condicion))].sort(), curP, 'Todas las Condiciones');
+        }
+
+        function populateSelect(elemId, items, selectedValue, defaultText) {
+            const select = document.getElementById(elemId);
+            select.innerHTML = `<option value="ALL">${defaultText}</option>`;
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item; opt.innerText = item;
+                if (item === selectedValue) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function setPlazoFilter(val) {
+            if (rawData.length === 0) return;
+            document.getElementById('filterPlazo').value = val;
+            onFilterChange('Plazo');
+        }
+
+        function resetFilters() {
+            if (rawData.length === 0) return;
+            ['filterDepto', 'filterContratista', 'filterResponsable', 'filterPlazo'].forEach(id => document.getElementById(id).value = 'ALL');
+            document.getElementById('searchInputTab3').value = '';
+            document.getElementById('searchInputHierarchical').value = '';
+            sortCol3 = '';
+            updateFilterDropdowns(rawData, 'ALL');
+            applyFiltersAndRender();
+        }
+
+        function applyFiltersAndRender() {
+            if (rawData.length === 0) return;
+            const depto = document.getElementById('filterDepto').value;
+            const contra = document.getElementById('filterContratista').value;
+            const resp = document.getElementById('filterResponsable').value;
+            const plazo = document.getElementById('filterPlazo').value;
+            const s3 = document.getElementById('searchInputTab3').value.toLowerCase();
+
+            currentFilteredData = rawData.filter(d =>
+                (depto === 'ALL' || d.Depto === depto) &&
+                (contra === 'ALL' || d.Contratista === contra) &&
+                (resp === 'ALL' || d.Responsable === resp) &&
+                (plazo === 'ALL' || d.Condicion === plazo));
+
+            const filteredTable3 = currentFilteredData.filter(d => !s3 ||
+                String(d.SST).toLowerCase().includes(s3) ||
+                d.Contratista.toLowerCase().includes(s3) ||
+                d.Responsable.toLowerCase().includes(s3) ||
+                d.Depto.toLowerCase().includes(s3));
+
+            renderDashboardMetricsAndCharts(currentFilteredData);
+            sortAndRenderTableTab3(filteredTable3);
+            
+            if(!document.getElementById('tab1Content').classList.contains('hidden')) {
+                renderHierarchicalReport(currentFilteredData);
+            }
+        }
+
+        // ============================================================
+        // TAB 3: TABLE (Dinámica y Reordenable con Colores)
+        // ============================================================
+        function sortTableTab3(col) {
+            if (sortCol3 === col) sortAsc3 = !sortAsc3;
+            else { sortCol3 = col; sortAsc3 = false; }
+            applyFiltersAndRender();
+        }
+
+        function sortAndRenderTableTab3(data) {
+            if (sortCol3) {
+                data.sort((a, b) => {
+                    let valA = a[sortCol3]; let valB = b[sortCol3];
+                    if (typeof valA === 'string') return sortAsc3 ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                    return sortAsc3 ? valA - valB : valB - valA;
+                });
+            }
+            renderTableTab3(data);
+        }
+
+        function renderTableTab3(data) {
+            const theadRow = document.getElementById('tableTab3TheadRow');
+            const tbody = document.getElementById('tableBodyTab3');
+            tbody.innerHTML = '';
+            document.getElementById('lblCountRowsTab3').innerText = data.length;
+
+            // Renderizar cabeceras con el color azul oscuro profundo
+            theadRow.innerHTML = '';
+            columnOrderTab3.forEach(colKey => {
+                const def = columnDefs[colKey];
+                const th = document.createElement('th');
+                // Color #2b308a (Azul oscuro de la imagen) para la cabecera
+                th.className = `p-3.5 bg-[#2b308a] hover:bg-[#1a1d59] text-white font-bold uppercase tracking-wider text-center ${def.style} cursor-grab active:cursor-grabbing`;
+                th.draggable = true;
+                th.dataset.col = colKey;
+                th.innerHTML = `${def.label} ↕<div class="resizer"></div>`;
+                
+                th.onclick = (e) => {
+                    if (e.target.classList.contains('resizer')) return;
+                    sortTableTab3(def.sortKey);
+                };
+                
+                th.ondragstart = (e) => { draggedCol = colKey; };
+                th.ondragover = (e) => { e.preventDefault(); };
+                th.ondrop = (e) => { 
+                    e.preventDefault();
+                    if (draggedCol && draggedCol !== colKey) {
+                        const fromIdx = columnOrderTab3.indexOf(draggedCol);
+                        const toIdx = columnOrderTab3.indexOf(colKey);
+                        columnOrderTab3.splice(fromIdx, 1);
+                        columnOrderTab3.splice(toIdx, 0, draggedCol);
+                        renderTableTab3(data);
+                    }
+                };
+                
+                theadRow.appendChild(th);
+            });
+
+            // Renderizar celdas del cuerpo
+            data.slice(0, 150).forEach(r => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition text-center border-b border-slate-100';
+                
+                columnOrderTab3.forEach(colKey => {
+                    const td = document.createElement('td');
+                    let content = '';
+                    
+                    if (colKey === 'SST') { content = r.SST; td.className = 'p-3 font-bold text-slate-900 border-r border-slate-100'; }
+                    else if (colKey === 'Depto') { content = r.Depto; td.className = 'p-3 text-left border-r border-slate-100'; }
+                    else if (colKey === 'Contratista') { content = r.Contratista; td.className = 'p-3 text-left border-r border-slate-100'; }
+                    else if (colKey === 'Responsable') { content = r.Responsable; td.className = 'p-3 text-left text-slate-600 font-semibold border-r border-slate-100'; }
+                    // DÍAS PENDIENTES: Color rojo oscuro
+                    else if (colKey === 'Dias') { content = `${r.Dias} d`; td.className = 'p-3 font-extrabold text-red-800 bg-red-50/30 border-r border-slate-100'; }
+                    else if (colKey === 'MontoMT') { content = `S/ ${r.MontoMT ? r.MontoMT.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
+                    else if (colKey === 'MontoMO') { content = `S/ ${r.MontoMO ? r.MontoMO.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
+                    // MONTO TOTAL: Color azul oscuro
+                    else if (colKey === 'Monto') { content = `S/ ${r.Monto ? r.Monto.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right font-extrabold text-[#2b308a] border-r border-slate-100'; }
+                    else if (colKey === 'Condicion') { 
+                        const isFuera = r.Condicion === 'Fuera de Plazo';
+                        content = `<span class="px-3 py-1 rounded-full text-xs font-bold ${isFuera ? 'badge-fuera' : 'badge-dentro'}">${r.Condicion}</span>`;
+                        td.className = 'p-3 border-r border-slate-100';
+                    }
+                    
+                    td.innerHTML = content;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            initResizers();
+        }
+
+        // ============================================================
+        // METRICS & CHARTS (TAB 2)
+        // ============================================================
+        function renderDashboardMetricsAndCharts(data) {
+            const total = data.length;
+            const fuera = data.filter(d => d.Condicion === 'Fuera de Plazo').length;
+            const dentro = total - fuera;
+            
+            const montoMT = data.reduce((a, c) => a + (c.MontoMT || 0), 0);
+            const montoMO = data.reduce((a, c) => a + (c.MontoMO || 0), 0);
+            const montoTotal = montoMT + montoMO; 
+
+            document.getElementById('kpiTotal').innerText = total;
+            document.getElementById('kpiFueraPlazo').innerText = fuera;
+            document.getElementById('kpiDentroPlazo').innerText = dentro;
+            document.getElementById('lblStatusText').innerText = `En Revisión Tecsur (${total} registros)`;
+            document.getElementById('kpiMontoTotal').innerText = 'S/ ' + montoTotal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('kpiMontoDetalle').innerText = `MT: S/ ${(montoMT / 1000).toFixed(1)}K | MO: S/ ${(montoMO / 1000).toFixed(1)}K`;
+            document.getElementById('kpiPctFuera').innerText = total ? ((fuera / total) * 100).toFixed(1) + '% del total' : '0%';
+            document.getElementById('kpiPctDentro').innerText = total ? ((dentro / total) * 100).toFixed(1) + '% del total' : '0%';
+
+            if(!document.getElementById('tab2Content').classList.contains('hidden')) {
+                renderCharts();
+            }
+        }
+
+        function formatFullDeptos(deptos) {
+            return deptos.map(dep => {
+                if (dep.length > 18) {
+                    const w = dep.split(' ');
+                    const mid = Math.floor(w.length / 2);
+                    return [w.slice(0, mid).join(' '), w.slice(mid).join(' ')];
+                }
+                return dep;
+            });
+        }
+
+        function renderCharts() {
+            const data = currentFilteredData;
+            const dR = [...new Set(data.map(d => d.Depto))];
+            const dF = formatFullDeptos(dR);
+            const f = dR.map(dep => data.filter(d => d.Depto === dep && d.Condicion === 'Fuera de Plazo').length);
+            const dn = dR.map(dep => data.filter(d => d.Depto === dep && d.Condicion !== 'Fuera de Plazo').length);
+            const tot = dR.map((_, i) => f[i] + dn[i]);
+            const maxT = Math.max(...tot, 0);
+
+            if (chartDeptoInstance) chartDeptoInstance.destroy();
+            chartDeptoInstance = new Chart(document.getElementById('chartDepto').getContext('2d'), {
+                type: 'bar', plugins: [ChartDataLabels],
+                data: {
+                    labels: dF,
+                    datasets: [
+                        { label: 'Fuera de Plazo', data: f, backgroundColor: '#ef4444', borderRadius: 4 },
+                        { label: 'Dentro de Plazo', data: dn, backgroundColor: '#22c55e', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 25 } },
+                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT * 1.15 } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        datalabels: {
+                            color: '#0f172a', font: { weight: '800', size: 11 }, anchor: 'end', align: 'top',
+                            formatter: (v, ctx) => {
+                                if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
+                                    const i = ctx.dataIndex;
+                                    const s = ctx.chart.data.datasets.reduce((acc, ds) => acc + ds.data[i], 0);
+                                    return s > 0 ? s : '';
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                }
+            });
+
+            const cR = [...new Set(data.map(d => d.Contratista))];
+            const cc = cR.map(c => data.filter(d => d.Contratista === c).length);
+            const maxT2 = Math.max(...cc, 0);
+
+            if (chartContratistaInstance) chartContratistaInstance.destroy();
+            chartContratistaInstance = new Chart(document.getElementById('chartContratista').getContext('2d'), {
+                type: 'bar', plugins: [ChartDataLabels],
+                data: {
+                    labels: cR.map(c => c.length > 20 ? c.substring(0, 18) + '...' : c),
+                    datasets: [{ label: 'Cant. Planos', data: cc, backgroundColor: '#3b82f6', borderRadius: 4 }]
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { right: 30 } },
+                    scales: { x: { beginAtZero: true, suggestedMax: maxT2 * 1.15 } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: { color: '#0f172a', font: { weight: '800', size: 11 }, anchor: 'end', align: 'right', formatter: v => v > 0 ? v : '' }
+                    }
+                }
+            });
+
+            const mt = dR.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMT || 0), 0));
+            const mo = dR.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMO || 0), 0));
+            const tot2 = dR.map((_, i) => mt[i] + mo[i]);
+            const maxT3 = Math.max(...tot2, 0);
+
+            if (chartMontoDeptoInstance) chartMontoDeptoInstance.destroy();
+            chartMontoDeptoInstance = new Chart(document.getElementById('chartMontoDepto').getContext('2d'), {
+                type: 'bar', plugins: [ChartDataLabels],
+                data: {
+                    labels: dF,
+                    datasets: [
+                        { label: 'Materiales (MT)', data: mt, backgroundColor: '#a855f7', borderRadius: 4 },
+                        { label: 'Mano de Obra (MO)', data: mo, backgroundColor: '#3b82f6', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 25 } },
+                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT3 * 1.15 } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        datalabels: {
+                            color: '#0f172a', font: { weight: '800', size: 10 }, anchor: 'end', align: 'top',
+                            formatter: (v, ctx) => {
+                                if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
+                                    const i = ctx.dataIndex;
+                                    const s = ctx.chart.data.datasets.reduce((acc, ds) => acc + ds.data[i], 0);
+                                    return s > 0 ? 'S/ ' + (s / 1000).toFixed(1) + 'K' : '';
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                }
+            });
+
+            const mt2 = cR.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMT || 0), 0));
+            const mo2 = cR.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMO || 0), 0));
+            const tot3 = cR.map((_, i) => mt2[i] + mo2[i]);
+            const maxT4 = Math.max(...tot3, 0);
+
+            if (chartMontoContraInstance) chartMontoContraInstance.destroy();
+            chartMontoContraInstance = new Chart(document.getElementById('chartMontoContra').getContext('2d'), {
+                type: 'bar', plugins: [ChartDataLabels],
+                data: {
+                    labels: cR.map(c => c.length > 18 ? c.substring(0, 16) + '...' : c),
+                    datasets: [
+                        { label: 'Materiales (MT)', data: mt2, backgroundColor: '#a855f7', borderRadius: 4 },
+                        { label: 'Mano de Obra (MO)', data: mo2, backgroundColor: '#3b82f6', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { right: 45 } },
+                    scales: { x: { stacked: true, beginAtZero: true, suggestedMax: maxT4 * 1.15 }, y: { stacked: true } },
+                    plugins: {
+                        legend: { position: 'top' },
+                        datalabels: {
+                            color: '#0f172a', font: { weight: '800', size: 10 }, anchor: 'end', align: 'right',
+                            formatter: (v, ctx) => {
+                                if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
+                                    const i = ctx.dataIndex;
+                                    const s = ctx.chart.data.datasets.reduce((acc, ds) => acc + ds.data[i], 0);
+                                    return s > 0 ? 'S/ ' + (s / 1000).toFixed(1) + 'K' : '';
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // TAB 1: HIERARCHICAL REPORT
+        // ============================================================
+        function renderHierarchicalReport(data) {
+            const container = document.getElementById('hierarchicalSectionsContainer');
+            container.innerHTML = '';
+
+            const searchTerm = document.getElementById('searchInputHierarchical').value.toLowerCase();
+
+            const sections = [
+                { title: 'MTTO MT y OBRAS MT', match: (dep) => (dep.includes('MTTO MT') || dep.includes('OBRAS MT')) && !dep.includes('CAÑETE') && !dep.includes('FREDY') },
+                { title: 'OBRAS BT', match: (dep) => dep.includes('OBRAS BT') },
+                { title: 'CAÑETE || EMERGENCIA - MTTO BT - MTTO MT', match: (dep) => dep.includes('CAÑETE') || dep.includes('FREDY') }
+            ];
+
+            sections.forEach(sec => {
+                const sectionItems = data.filter(d => sec.match(d.Depto));
+                if (sectionItems.length === 0) {
+                    container.innerHTML += `
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                            <div class="bg-slate-900 text-white p-3 font-bold text-xs text-center">${sec.title}</div>
+                            <div class="p-6 text-center text-xs text-slate-400">Sin registros para esta sección</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const deptosInSec = [...new Set(sectionItems.map(d => d.Depto))];
+                let secTotalSST = 0;
+                let secTotalMonto = 0;
+
+                let sectionHtml = `
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                        <div class="bg-slate-900 text-white p-3 text-center space-y-1">
+                            <div class="font-extrabold text-xs tracking-wide">${sec.title}</div>
+                            <div class="text-[10px] text-red-400 font-bold uppercase">Letras rojas: Días pendientes de revisión</div>
+                        </div>
+                        <div class="p-3 space-y-3 bg-slate-50/50 flex-grow">
+                `;
+
+                deptosInSec.forEach(depto => {
+                    const deptoItems = sectionItems.filter(d => d.Depto === depto);
+                    const deptoSSTCount = deptoItems.length;
+                    const deptoMonto = deptoItems.reduce((acc, curr) => acc + (curr.Monto || 0), 0);
+
+                    secTotalSST += deptoSSTCount;
+                    secTotalMonto += deptoMonto;
+
+                    // Se añade "SST's" al lado del número total del departamento
+                    sectionHtml += `
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div class="bg-emerald-700 text-white px-3 py-2 font-bold text-[11px] flex justify-between items-center">
+                                <span class="truncate pr-2" title="${depto}">${depto}</span>
+                                <div class="flex items-center space-x-2 shrink-0">
+                                    <span>${deptoSSTCount} SST's</span>
+                                    <span>S/ ${(deptoMonto).toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
+                                </div>
+                            </div>
+                            <div class="p-2 divide-y divide-slate-100">
+                    `;
+
+                    const supervisores = [...new Set(deptoItems.map(d => d.Responsable))];
+                    let hasVisibleSup = false;
+
+                    supervisores.forEach(sup => {
+                        if (searchTerm && !sup.toLowerCase().includes(searchTerm) && !depto.toLowerCase().includes(searchTerm)) {
+                            return;
+                        }
+                        hasVisibleSup = true;
+
+                        const supItems = deptoItems.filter(d => d.Responsable === sup);
+                        const supSSTCount = supItems.length;
+                        const supMonto = supItems.reduce((acc, curr) => acc + (curr.Monto || 0), 0);
+
+                        const daysGroupMap = {};
+                        supItems.forEach(item => {
+                            const d = item.Dias || 0;
+                            if (!daysGroupMap[d]) {
+                                daysGroupMap[d] = { count: 0, monto: 0 };
+                            }
+                            daysGroupMap[d].count += 1;
+                            daysGroupMap[d].monto += (item.Monto || 0);
+                        });
+
+                        let daysDetailHtml = `<div class="space-y-1 w-full">`;
+                        Object.keys(daysGroupMap).sort((a,b) => Number(a)-Number(b)).forEach(day => {
+                            const info = daysGroupMap[day];
+                            daysDetailHtml += `
+                                <div class="flex items-center justify-between text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-red-600 font-black w-5 text-right">${day}</span>
+                                        <span class="text-slate-800 font-bold w-5 text-center">${info.count}</span>
+                                    </div>
+                                    <span class="text-slate-900 font-semibold">S/ ${info.monto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
+                                </div>
+                            `;
+                        });
+                        daysDetailHtml += `</div>`;
+
+                        sectionHtml += `
+                            <div class="py-2 px-2 space-y-1.5 hover:bg-slate-50 transition rounded-lg">
+                                <div class="font-bold text-[11px] text-slate-800 truncate" title="${sup}">${sup}</div>
+                                <div>${daysDetailHtml}</div>
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold px-1 pt-0.5">
+                                    <span>Total SST's: <strong class="text-slate-900">${supSSTCount}</strong></span>
+                                    <span>Monto: <strong class="text-purple-700">S/ ${supMonto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</strong></span>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    if (!hasVisibleSup && searchTerm) {
+                        sectionHtml += `<div class="p-2 text-center text-[11px] text-slate-400 italic">Sin resultados</div>`;
+                    }
+
+                    sectionHtml += `</div></div>`;
+                });
+
+                sectionHtml += `
+                        <div class="bg-slate-900 text-white p-2.5 rounded-xl font-black text-xs flex justify-between items-center shadow-inner mt-2">
+                            <span>TOTAL GENERAL</span>
+                            <div class="flex items-center space-x-3">
+                                <span>${secTotalSST} SST's</span>
+                                <span>S/ ${secTotalMonto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+
+                container.innerHTML += sectionHtml;
+            });
+
+            lucide.createIcons();
+        }
+
+        // ============================================================
+        // SUMMARY PNG
+        // ============================================================
+        function showToast(message, type = 'info') {
+            const colors = { success: '#16a34a', error: '#dc2626', warning: '#f59e0b', info: '#0f172a' };
+            const t = document.createElement('div');
+            t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${colors[type] || colors.info};color:#fff;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,0.25);animation:slideUpToast .3s ease-out;max-width:90vw;text-align:center;`;
+            t.textContent = message;
+            document.body.appendChild(t);
+            setTimeout(() => {
+                t.style.transition = 'opacity .3s, transform .3s';
+                t.style.opacity = '0';
+                t.style.transform = 'translate(-50%, 20px)';
+                setTimeout(() => t.remove(), 350);
+            }, 3500);
+        }
+
+        function closeSummaryModal() {
+            _summaryCancelled = true;
+            document.getElementById('summaryModal').classList.add('hidden');
+            document.getElementById('summaryCaptureWrapper').innerHTML = '';
+            _summaryReady = false;
+            _summaryCanvas = null;
+        }
+
+        async function openSummaryModal() {
+            if (rawData.length === 0) { showToast('⚠️ Primero carga los datos', 'warning'); return; }
+            if (typeof html2canvas === 'undefined') { showToast('❌ html2canvas no cargó', 'error'); return; }
+
+            _summaryCancelled = false;
+            _summaryReady = false;
+            _summaryCanvas = null;
+            const modal = document.getElementById('summaryModal');
+            const wrapper = document.getElementById('summaryCaptureWrapper');
+            const status = document.getElementById('summaryStatus');
+            const btnD = document.getElementById('btnDownloadSummary');
+            const btnTxt = btnD.querySelector('span');
+
+            wrapper.innerHTML = `<div class="flex items-center justify-center" style="height:400px;"><div class="text-center"><div class="summary-spinner mx-auto"></div><p class="mt-4 text-sm text-slate-500 font-medium">Generando resumen...</p></div></div>`;
+            status.innerText = '';
+            btnD.disabled = true;
+            btnTxt.innerText = 'Descargar PNG';
+            modal.classList.remove('hidden');
+            document.getElementById('summaryPreviewArea').scrollTop = 0;
+
+            try {
+                if (document.fonts && document.fonts.ready) await document.fonts.ready;
+                await new Promise(r => setTimeout(r, 150));
+                if (_summaryCancelled) return;
+
+                // Construir el HTML para el resumen basado en los datos actuales
+                wrapper.innerHTML = buildSummaryHtml();
+
+                await new Promise(r => setTimeout(r, 250));
+                if (_summaryCancelled) return;
+
+                const now = new Date();
+                _summaryFilename = `Reporte_Planos_${now.toISOString().slice(0, 10)}_${now.toTimeString().slice(0, 5).replace(':', '-')}.png`;
+
+                status.innerText = 'Generando PNG en Full HD...';
+                const capture = document.getElementById('summaryCapture');
+                _summaryCanvas = await html2canvas(capture, {
+                    scale: 3,
+                    backgroundColor: '#f8fafc',
+                    useCORS: true,
+                    logging: false,
+                    windowWidth: 1500
+                });
+                if (_summaryCancelled) return;
+
+                _summaryReady = true;
+                triggerCanvasDownload();
+                if (_summaryCancelled) return;
+
+                status.innerHTML = `✅ PNG listo (${_summaryCanvas.width}×${_summaryCanvas.height} px)`;
+                btnD.disabled = false;
+                btnTxt.innerText = 'Descargar de nuevo';
+            } catch (err) {
+                console.error('[Summary] Error:', err);
+                status.innerHTML = '❌ Error: ' + err.message;
+                showToast('❌ Error al generar el resumen', 'error');
+            }
+        }
+
+        function triggerCanvasDownload() {
+            if (!_summaryCanvas) return;
+            const link = document.createElement('a');
+            link.download = _summaryFilename || 'Reporte_Planos.png';
+            link.href = _summaryCanvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast(`✅ PNG descargado (${_summaryCanvas.width}×${_summaryCanvas.height} px)`, 'success');
+        }
+
+        async function downloadSummaryPng() {
+            if (!_summaryReady || !_summaryCanvas) {
+                if (!_summaryReady) showToast('⏳ Espera a que termine de generarse', 'warning');
+                return;
+            }
+            const btnD = document.getElementById('btnDownloadSummary');
+            const icon = btnD.querySelector('svg');
+            try {
+                if (icon) icon.classList.add('spin');
+                btnD.disabled = true;
+                triggerCanvasDownload();
+            } finally {
+                if (icon) icon.classList.remove('spin');
+                btnD.disabled = false;
+            }
+        }
+
+        function buildSummaryHtml() {
+            const fechaCorte = document.getElementById('lblFechaCorte').innerText;
+            const kpiTotal = document.getElementById('kpiTotal').innerText;
+            const kpiFuera = document.getElementById('kpiFueraPlazo').innerText;
+            const kpiDentro = document.getElementById('kpiDentroPlazo').innerText;
+            const kpiMonto = document.getElementById('kpiMontoTotal').innerText;
+            const kpiPctF = document.getElementById('kpiPctFuera').innerText;
+            const kpiPctD = document.getElementById('kpiPctDentro').innerText;
+            const kpiMontoDet = document.getElementById('kpiMontoDetalle').innerText;
+            const fechaGen = new Date().toLocaleString('es-PE', { hour12: false });
+
+            // Filtros activos
+            const d = document.getElementById('filterDepto').value;
+            const c = document.getElementById('filterContratista').value;
+            const r = document.getElementById('filterResponsable').value;
+            const p = document.getElementById('filterPlazo').value;
+            const pills = [];
+            if (d !== 'ALL') pills.push(`Depto: ${d}`);
+            if (c !== 'ALL') pills.push(`Contratista: ${c}`);
+            if (r !== 'ALL') pills.push(`Responsable: ${r}`);
+            if (p !== 'ALL') pills.push(`Condición: ${p}`);
+
+            const filtroHtml = pills.length > 0
+                ? `<div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                    <span style="font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Filtros:</span>
+                    ${pills.map(x => `<span style="background:rgba(255,255,255,.15);color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;">${x}</span>`).join('')}
+                   </div>`
+                : `<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vista completa (sin filtros)</div>`;
+
+            // Generar Reporte Jerárquico HTML estático (Clonado y corregido para html2canvas)
+            const reporteOriginal = document.getElementById('hierarchicalSectionsContainer');
+            let reporteClonado = '';
+            if (reporteOriginal) {
+                const clon = reporteOriginal.cloneNode(true);
+                // Forzar un grid de 3 columnas con estilos en línea para evitar fallos de Tailwind
+                clon.style.cssText = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; align-items: start; width: 100%;";
+                
+                // Corregir el truncamiento de texto (nombres cortados)
+                clon.querySelectorAll('.truncate').forEach(el => {
+                    el.style.whiteSpace = 'normal';
+                    el.style.wordBreak = 'break-word';
+                    el.style.overflow = 'visible';
+                    el.style.textOverflow = 'clip';
+                });
+
+                reporteClonado = clon.outerHTML;
+            }
+
+            // Retornar solo KPIs y Reporte Jerárquico (sin Detalle Operativo)
+            return `
+            <div id="summaryCapture" style="width:1400px;padding:40px;background:#f8fafc;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#0f172a;box-sizing:border-box;">
+                <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;padding:28px 32px;border-radius:20px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-size:26px;font-weight:800;letter-spacing:-.5px;">Control de Planos Pendientes</div>
+                        <div style="font-size:13px;color:#94a3b8;margin-top:6px;">Reporte General</div>
+                        ${filtroHtml}
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Último corte registrado</div>
+                        <div style="font-size:18px;font-weight:700;margin-top:4px;">${fechaCorte}</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+                    <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid #2563eb;border-radius:16px;padding:20px;">
+                        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Total Pendientes</div>
+                        <div style="font-size:34px;font-weight:800;color:#0f172a;margin-top:6px;">${kpiTotal}</div>
+                    </div>
+                    <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid #dc2626;border-radius:16px;padding:20px;">
+                        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Fuera de Plazo</div>
+                        <div style="font-size:34px;font-weight:800;color:#dc2626;margin-top:6px;">${kpiFuera}</div>
+                        <div style="font-size:11px;color:#dc2626;font-weight:700;margin-top:8px;">${kpiPctF}</div>
+                    </div>
+                    <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid #16a34a;border-radius:16px;padding:20px;">
+                        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Dentro de Plazo</div>
+                        <div style="font-size:34px;font-weight:800;color:#16a34a;margin-top:6px;">${kpiDentro}</div>
+                        <div style="font-size:11px;color:#16a34a;font-weight:700;margin-top:8px;">${kpiPctD}</div>
+                    </div>
+                    <div style="background:#fff;border:1px solid #e2e8f0;border-left:4px solid #9333ea;border-radius:16px;padding:20px;">
+                        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Monto Proyectado</div>
+                        <div style="font-size:26px;font-weight:800;color:#0f172a;margin-top:6px;">${kpiMonto}</div>
+                        <div style="font-size:11px;color:#64748b;margin-top:8px;">${kpiMontoDet}</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:24px;">
+                    ${reporteClonado}
+                </div>
+
+                <div style="text-align:center;font-size:11px;color:#94a3b8;padding-top:16px;border-top:1px solid #e2e8f0;margin-top:24px;">
+                    Reporte generado el ${fechaGen} · Fuente: Google Sheets · Dashboard Control de Planos Pendientes
+                </div>
+            </div>`;
+        }
+    </script>
+</body>
+</html>
