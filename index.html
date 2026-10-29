@@ -4,7 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Control de Planos Pendientes</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: '#2563eb',
+                    }
+                }
+            }
+        }
+    </script>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
@@ -13,8 +27,25 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        
+        /* Modo Claro (Default) */
+        body { background-color: #f8fafc; color: #1e293b; }
         .glass-panel { background: rgba(255, 255, 255, 0.98); border: 1px solid #e2e8f0; }
+        
+        /* Modo Oscuro */
+        .dark body { background-color: #0f172a; color: #f1f5f9; }
+        .dark .glass-panel { background: rgba(30, 41, 59, 0.98); border: 1px solid #334155; }
+        .dark .bg-white { background-color: #1e293b !important; color: #f1f5f9; }
+        .dark .bg-slate-50 { background-color: #0f172a !important; }
+        .dark .bg-slate-100 { background-color: #1e293b !important; }
+        .dark .text-slate-800 { color: #f1f5f9 !important; }
+        .dark .text-slate-900 { color: #ffffff !important; }
+        .dark .text-slate-600 { color: #94a3b8 !important; }
+        .dark .border-slate-200 { border-color: #334155 !important; }
+        .dark .border-slate-100 { border-color: #334155 !important; }
+        .dark .hover\:bg-slate-50:hover { background-color: #334155 !important; }
+        
         .kpi-card { transition: all 0.2s ease-in-out; cursor: pointer; }
         .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
         .badge-fuera { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; min-width: 110px; display: inline-block; text-align: center; }
@@ -23,6 +54,15 @@
         
         table { table-layout: fixed; width: 100%; }
         th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        /* 🔥 ESTILOS PARA LA CABECERA DE LA TABLA DETALLE (2 LÍNEAS Y TAMAÑO) */
+        #tableTab3 th {
+            white-space: normal !important;
+            line-height: 1.3;
+            padding: 10px 8px;
+            vertical-align: middle;
+        }
+        
         th { position: relative; user-select: none; cursor: grab; }
         th:active { cursor: grabbing; }
         th.dragging { opacity: 0.5; background-color: #1e293b !important; border: 2px dashed #60a5fa; }
@@ -30,6 +70,23 @@
         .resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; cursor: col-resize; user-select: none; touch-action: none; z-index: 20; }
         .resizer:hover, .resizing { background-color: #60a5fa; }
         
+        /* Animación para el contenedor de acciones (Actualizar/Subir) */
+        #collapsibleActions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            max-width: 0;
+            opacity: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            transition: all 0.3s ease-in-out;
+        }
+        #collapsibleActions.show {
+            max-width: 400px; 
+            opacity: 1;
+            margin-right: 0.5rem;
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 1s linear infinite; }
         button:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -37,9 +94,9 @@
         @keyframes slideUpToast { from { transform: translate(-50%, 30px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
     </style>
 </head>
-<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+<body class="antialiased min-h-screen flex flex-col">
 
-    <header class="bg-slate-900 text-white sticky top-0 z-50 shadow-lg">
+    <header class="bg-slate-900 dark:bg-slate-950 text-white sticky top-0 z-50 shadow-lg border-b border-slate-800">
         <div class="max-w-[96rem] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="bg-blue-600 p-2.5 rounded-xl shadow-md"><i data-lucide="folder-clock" class="w-6 h-6 text-white"></i></div>
@@ -48,22 +105,43 @@
                     <p class="text-xs text-slate-400">Sistema Dinámico de Monitoreo de Aprobaciones</p>
                 </div>
             </div>
-            <div class="flex items-center space-x-3">
+            
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                
+                <!-- 1. Botón Modo Claro / Oscuro (Texto Negro) -->
+                <button onclick="toggleTheme()" class="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md">
+                    <i data-lucide="sun" id="themeIcon" class="w-4 h-4"></i>
+                    <span id="themeText">Modo claro</span>
+                </button>
+
+                <!-- Separador | -->
+                <span class="text-slate-600 dark:text-slate-500 font-light text-xl px-1">|</span>
+
+                <!-- 2. Botón Resumen PNG (Siempre visible) -->
                 <button id="btnSummary" onclick="openSummaryModal()" title="Generar resumen PNG de alta calidad"
                         class="cursor-pointer bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
                     <i data-lucide="image-down" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Resumen PNG</span>
                 </button>
-                <button id="btnRefresh" onclick="loadFromGoogleSheet(true)" title="Sincronizar con Google Sheets"
-                        class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Actualizar</span>
+
+                <!-- 3. Contenedor Ocultable (Actualizar y Subir Excel) -->
+                <div id="collapsibleActions">
+                    <button id="btnRefresh" onclick="loadFromGoogleSheet(true)" title="Sincronizar con Google Sheets"
+                            class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Actualizar</span>
+                    </button>
+                    <label for="excelFile" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                        <i data-lucide="file-up" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">Subir Excel</span>
+                    </label>
+                    <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden">
+                </div>
+
+                <!-- 4. Botón Ojo (Toggle) -->
+                <button onclick="toggleActions()" class="bg-slate-700 hover:bg-slate-600 text-white p-2.5 rounded-xl transition shadow-md border border-slate-600 ml-1">
+                    <i data-lucide="eye-off" id="eyeIcon" class="w-5 h-5"></i>
                 </button>
-                <label for="excelFile" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 px-4 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
-                    <i data-lucide="file-up" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Subir Excel</span>
-                </label>
-                <input type="file" id="excelFile" accept=".xlsx, .xls" class="hidden">
             </div>
         </div>
     </header>
@@ -71,33 +149,33 @@
     <main class="flex-grow max-w-[96rem] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
         <!-- Banner Info -->
-        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-4 transition-colors">
             <div class="flex items-center space-x-3">
-                <div class="bg-amber-100 p-2 rounded-lg"><i data-lucide="clock" class="w-5 h-5 text-amber-700"></i></div>
+                <div class="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-lg"><i data-lucide="clock" class="w-5 h-5 text-amber-700 dark:text-amber-400"></i></div>
                 <div>
-                    <span class="text-xs text-slate-500 font-medium uppercase tracking-wider block">Último corte registrado</span>
-                    <strong id="lblFechaCorte" class="text-base font-bold text-slate-900">--/--/---- --:--:--</strong>
+                    <span class="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider block">Último corte registrado</span>
+                    <strong id="lblFechaCorte" class="text-base font-bold text-slate-900 dark:text-white">--/--/---- --:--:--</strong>
                 </div>
             </div>
             <div class="flex flex-col items-end space-y-1">
-                <div class="flex items-center space-x-2 bg-slate-100 py-1.5 px-3.5 rounded-full text-xs font-semibold text-slate-600">
+                <div class="flex items-center space-x-2 bg-slate-100 dark:bg-slate-700 py-1.5 px-3.5 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300">
                     <span id="statusIndicator" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
                     <span id="lblStatusText">Sin información cargada</span>
                 </div>
-                <span id="lblLastUpdate" class="text-[10px] text-slate-400"></span>
+                <span id="lblLastUpdate" class="text-[10px] text-slate-400 dark:text-slate-500"></span>
             </div>
         </div>
 
         <!-- Navigation Tabs & External Button -->
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div class="flex flex-wrap gap-2 bg-slate-200/80 p-1.5 rounded-2xl w-fit">
-                <button id="tab1Btn" onclick="switchTab('tab1')" class="tab-btn active px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+            <div class="flex flex-wrap gap-2 bg-slate-200/80 dark:bg-slate-800 p-1.5 rounded-2xl w-fit transition-colors">
+                <button id="tab1Btn" onclick="switchTab('tab1')" class="tab-btn active px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 transition flex items-center space-x-2">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>1. Reporte Jerárquico</span>
                 </button>
-                <button id="tab2Btn" onclick="switchTab('tab2')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                <button id="tab2Btn" onclick="switchTab('tab2')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 transition flex items-center space-x-2">
                     <i data-lucide="bar-chart-3" class="w-4 h-4"></i><span>2. Resumen General y Gráficos</span>
                 </button>
-                <button id="tab3Btn" onclick="switchTab('tab3')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                <button id="tab3Btn" onclick="switchTab('tab3')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 transition flex items-center space-x-2">
                     <i data-lucide="table" class="w-4 h-4"></i><span>3. Detalle Operativo</span>
                 </button>
             </div>
@@ -114,64 +192,64 @@
             <div onclick="setPlazoFilter('ALL')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-blue-600">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Pendientes</p>
-                        <h3 id="kpiTotal" class="text-3xl font-extrabold text-slate-900 mt-1">0</h3>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Pendientes</p>
+                        <h3 id="kpiTotal" class="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">0</h3>
                     </div>
-                    <div class="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="files" class="w-6 h-6"></i></div>
+                    <div class="p-2.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl"><i data-lucide="files" class="w-6 h-6"></i></div>
                 </div>
-                <p class="text-xs text-slate-500 mt-3 font-medium">Ver todos los trámites</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 font-medium">Ver todos los trámites</p>
             </div>
             <div onclick="setPlazoFilter('Fuera de Plazo')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-red-500">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fuera de Plazo</p>
-                        <h3 id="kpiFueraPlazo" class="text-3xl font-extrabold text-red-600 mt-1">0</h3>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Fuera de Plazo</p>
+                        <h3 id="kpiFueraPlazo" class="text-3xl font-extrabold text-red-600 dark:text-red-400 mt-1">0</h3>
                     </div>
-                    <div class="p-2.5 bg-red-50 text-red-600 rounded-xl"><i data-lucide="alert-circle" class="w-6 h-6"></i></div>
+                    <div class="p-2.5 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl"><i data-lucide="alert-circle" class="w-6 h-6"></i></div>
                 </div>
-                <p id="kpiPctFuera" class="text-xs text-red-600 font-bold mt-3">0% del total</p>
+                <p id="kpiPctFuera" class="text-xs text-red-600 dark:text-red-400 font-bold mt-3">0% del total</p>
             </div>
             <div onclick="setPlazoFilter('Dentro de plazo')" class="glass-panel kpi-card p-5 rounded-2xl shadow-sm border-l-4 border-l-emerald-500">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Dentro de Plazo</p>
-                        <h3 id="kpiDentroPlazo" class="text-3xl font-extrabold text-emerald-600 mt-1">0</h3>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Dentro de Plazo</p>
+                        <h3 id="kpiDentroPlazo" class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">0</h3>
                     </div>
-                    <div class="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
+                    <div class="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
                 </div>
-                <p id="kpiPctDentro" class="text-xs text-emerald-600 font-bold mt-3">0% del total</p>
+                <p id="kpiPctDentro" class="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-3">0% del total</p>
             </div>
             <div class="glass-panel p-5 rounded-2xl shadow-sm border-l-4 border-l-purple-600">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Monto Proyectado</p>
-                        <h3 id="kpiMontoTotal" class="text-2xl font-extrabold text-slate-900 mt-1">S/ 0.00</h3>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Monto Proyectado</p>
+                        <h3 id="kpiMontoTotal" class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">S/ 0.00</h3>
                     </div>
-                    <div class="p-2.5 bg-purple-50 text-purple-600 rounded-xl"><i data-lucide="banknote" class="w-6 h-6"></i></div>
+                    <div class="p-2.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl"><i data-lucide="banknote" class="w-6 h-6"></i></div>
                 </div>
-                <p id="kpiMontoDetalle" class="text-xs text-slate-500 mt-3 font-medium">MT: S/ 0.0K | MO: S/ 0.0K</p>
+                <p id="kpiMontoDetalle" class="text-xs text-slate-500 dark:text-slate-400 mt-3 font-medium">MT: S/ 0.0K | MO: S/ 0.0K</p>
             </div>
         </div>
 
         <!-- Filters Section -->
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+        <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
             <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
-                <h2 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
-                    <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+                <h2 class="text-sm font-bold text-slate-800 dark:text-white flex items-center space-x-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
                     <span>Control de Filtrado</span>
                 </h2>
                 
                 <div class="flex items-center space-x-3">
-                    <button onclick="downloadExcel(false)" class="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                    <button onclick="downloadExcel(false)" class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
                         <i data-lucide="download" class="w-3.5 h-3.5"></i><span>Descargar Todo</span>
                     </button>
-                    <button onclick="downloadExcel(true)" class="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                    <button onclick="downloadExcel(true)" class="text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
                         <i data-lucide="filter" class="w-3.5 h-3.5"></i><span>Descargar Filtrado</span>
                     </button>
                     
-                    <div class="w-px h-6 bg-slate-300 mx-1"></div>
+                    <div class="w-px h-6 bg-slate-300 dark:bg-slate-600 mx-1"></div>
 
-                    <button id="btnReset" class="text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                    <button id="btnReset" class="text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
                         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i><span>Limpiar</span>
                     </button>
                 </div>
@@ -179,26 +257,26 @@
             
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Departamentos</label>
-                    <select id="filterDepto" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Departamentos</label>
+                    <select id="filterDepto" class="w-full text-xs font-medium border-slate-200 dark:border-slate-600 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white p-2.5 border transition-colors">
                         <option value="ALL">Todos los Departamentos</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Sup. Responsables</label>
-                    <select id="filterResponsable" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Sup. Responsables</label>
+                    <select id="filterResponsable" class="w-full text-xs font-medium border-slate-200 dark:border-slate-600 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white p-2.5 border transition-colors">
                         <option value="ALL">Todos los Sup. Responsables</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Contratistas</label>
-                    <select id="filterContratista" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Contratistas</label>
+                    <select id="filterContratista" class="w-full text-xs font-medium border-slate-200 dark:border-slate-600 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white p-2.5 border transition-colors">
                         <option value="ALL">Todas las Contratistas</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Condiciones</label>
-                    <select id="filterPlazo" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Condiciones</label>
+                    <select id="filterPlazo" class="w-full text-xs font-medium border-slate-200 dark:border-slate-600 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white p-2.5 border transition-colors">
                         <option value="ALL">Todas las Condiciones</option>
                         <option value="Fuera de Plazo">Fuera de Plazo</option>
                         <option value="Dentro de plazo">Dentro de plazo</option>
@@ -207,24 +285,24 @@
             </div>
         </div>
 
-        <div id="noDataPlaceholder" class="bg-white p-12 rounded-2xl shadow-sm border border-slate-200 text-center space-y-4">
-            <div class="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600">
+        <div id="noDataPlaceholder" class="bg-white dark:bg-slate-800 p-12 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 text-center space-y-4 transition-colors">
+            <div class="bg-blue-50 dark:bg-blue-900/30 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600 dark:text-blue-400">
                 <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
             </div>
-            <h3 class="text-lg font-bold text-slate-800">Esperando datos de la hoja "Base Datos"</h3>
-            <p class="text-sm text-slate-500 max-w-md mx-auto">Sube tu Excel o sincroniza con Google Sheets. El sistema leerá automáticamente la pestaña "Base Datos".</p>
+            <h3 class="text-lg font-bold text-slate-800 dark:text-white">Esperando datos de la hoja "Base Datos"</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">Sube tu Excel o sincroniza con Google Sheets. El sistema leerá automáticamente la pestaña "Base Datos".</p>
         </div>
 
         <!-- TAB 1: Reporte Jerárquico -->
         <div id="tab1Content" class="hidden space-y-6">
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap justify-between items-center gap-4 transition-colors">
                 <div class="flex items-center space-x-2">
-                    <i data-lucide="layout-grid" class="w-5 h-5 text-emerald-600"></i>
-                    <h3 class="text-sm font-bold text-slate-800">Reporte Jerárquico General</h3>
+                    <i data-lucide="layout-grid" class="w-5 h-5 text-emerald-600 dark:text-emerald-400"></i>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Reporte Jerárquico General</h3>
                 </div>
                 <div class="relative w-full sm:w-80">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-                    <input type="text" id="searchInputHierarchical" placeholder="Buscar supervisor o departamento..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 rounded-xl border focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                    <input type="text" id="searchInputHierarchical" placeholder="Buscar supervisor o departamento..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 dark:border-slate-600 rounded-xl border focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-slate-700 text-slate-800 dark:text-white transition-colors">
                 </div>
             </div>
 
@@ -236,47 +314,47 @@
         <!-- TAB 2: Resumen General y Gráficos -->
         <div id="tab2Content" class="hidden space-y-6">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-600"></i>
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-4 flex items-center space-x-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
                         <span>Estado de Cumplimiento por Departamento</span>
                     </h3>
                     <div class="relative h-80"><canvas id="chartDepto"></canvas></div>
                 </div>
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <i data-lucide="building-2" class="w-4 h-4 text-blue-600"></i>
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-4 flex items-center space-x-2">
+                        <i data-lucide="building-2" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
                         <span>Distribución de Planos por Contratista</span>
                     </h3>
                     <div class="relative h-80"><canvas id="chartContratista"></canvas></div>
                 </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <i data-lucide="coins" class="w-4 h-4 text-purple-600"></i>
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-4 flex items-center space-x-2">
+                        <i data-lucide="coins" class="w-4 h-4 text-purple-600 dark:text-purple-400"></i>
                         <span>Monto Proyectado por Departamento (S/)</span>
                     </h3>
                     <div class="relative h-80"><canvas id="chartMontoDepto"></canvas></div>
                 </div>
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <i data-lucide="wallet" class="w-4 h-4 text-purple-600"></i>
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-4 flex items-center space-x-2">
+                        <i data-lucide="wallet" class="w-4 h-4 text-purple-600 dark:text-purple-400"></i>
                         <span>Top Contratistas por Monto Proyectado (S/)</span>
                     </h3>
                     <div class="relative h-80"><canvas id="chartMontoContra"></canvas></div>
                 </div>
             </div>
 
-            <!-- Opciones de Visualización (movido al final) -->
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <!-- Opciones de Visualización -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors">
                 <div class="flex items-center space-x-2">
-                    <i data-lucide="arrow-up-down" class="w-5 h-5 text-blue-600"></i>
-                    <h3 class="text-sm font-bold text-slate-800">Opciones de Visualización</h3>
+                    <i data-lucide="arrow-up-down" class="w-5 h-5 text-blue-600 dark:text-blue-400"></i>
+                    <h3 class="text-sm font-bold text-slate-800 dark:text-white">Opciones de Visualización</h3>
                 </div>
                 <div class="flex items-center space-x-2 w-full sm:w-auto">
-                    <label class="text-xs font-semibold text-slate-600 shrink-0">Ordenar gráficos:</label>
-                    <select id="chartSortSelect" onchange="changeChartSort()" class="w-full sm:w-auto text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                    <label class="text-xs font-semibold text-slate-600 dark:text-slate-400 shrink-0">Ordenar gráficos:</label>
+                    <select id="chartSortSelect" onchange="changeChartSort()" class="w-full sm:w-auto text-xs font-medium border-slate-200 dark:border-slate-600 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white p-2.5 border transition-colors">
                         <option value="default">Orden Original</option>
                         <option value="cant-desc">Cantidad / Monto (Mayor a Menor)</option>
                         <option value="cant-asc">Cantidad / Monto (Menor a Mayor)</option>
@@ -289,15 +367,15 @@
 
         <!-- TAB 3: Detalle Operativo -->
         <div id="tab3Content" class="hidden space-y-6">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4 bg-slate-50/50">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
+                <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap justify-between items-center gap-4 bg-slate-50/50 dark:bg-slate-800 transition-colors">
                     <div class="flex items-center space-x-2">
-                        <i data-lucide="table" class="w-4 h-4 text-blue-600"></i>
-                        <h3 class="text-sm font-bold text-slate-800">Detalle Operativo de Requerimientos</h3>
+                        <i data-lucide="table" class="w-4 h-4 text-blue-600 dark:text-blue-400"></i>
+                        <h3 class="text-sm font-bold text-slate-800 dark:text-white">Detalle Operativo de Requerimientos</h3>
                     </div>
                     <div class="relative w-full sm:w-80">
                         <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-                        <input type="text" id="searchInputTab3" placeholder="Buscar SST, Contratista, Responsable..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 rounded-xl border focus:ring-blue-500 focus:border-blue-500 bg-white">
+                        <input type="text" id="searchInputTab3" placeholder="Buscar SST, Contratista, Responsable..." class="text-xs pl-9 pr-4 py-2 w-full border-slate-200 dark:border-slate-600 rounded-xl border focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-700 text-slate-800 dark:text-white transition-colors">
                     </div>
                 </div>
                 <div class="overflow-x-auto">
@@ -305,12 +383,12 @@
                         <thead>
                             <tr id="tableTab3TheadRow" class="text-white font-bold uppercase tracking-wider text-center text-[11px]"></tr>
                         </thead>
-                        <tbody id="tableBodyTab3" class="divide-y divide-slate-100 text-slate-700 font-medium"></tbody>
+                        <tbody id="tableBodyTab3" class="divide-y divide-slate-100 dark:divide-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors"></tbody>
                     </table>
                 </div>
-                <div class="p-3 bg-slate-50 text-slate-500 text-xs flex justify-between items-center border-t border-slate-200">
+                <div class="p-3 bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-xs flex justify-between items-center border-t border-slate-200 dark:border-slate-700 transition-colors">
                     <span>Mostrando <strong id="lblCountRowsTab3">0</strong> trámites</span>
-                    <span class="text-[11px] text-slate-400">Arrastra los títulos para mover columnas | Arrastra bordes para ancho</span>
+                    <span class="text-[11px] text-slate-400 dark:text-slate-500">Arrastra los títulos para mover columnas | Arrastra bordes para ancho</span>
                 </div>
             </div>
         </div>
@@ -319,8 +397,8 @@
 
     <!-- Modal Resumen -->
     <div id="summaryModal" class="hidden fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col">
-            <div class="p-4 border-b flex justify-between items-center bg-slate-900 text-white">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-[95vw] max-h-[95vh] overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900 dark:bg-slate-950 text-white">
                 <div class="flex items-center space-x-2">
                     <i data-lucide="image" class="w-5 h-5"></i>
                     <h2 class="font-bold text-sm">Vista previa del resumen</h2>
@@ -332,15 +410,15 @@
             <div id="summaryPreviewArea" class="overflow-auto flex-grow p-4" style="background:#e2e8f0; max-height:65vh;">
                 <div id="summaryCaptureWrapper"></div>
             </div>
-            <div class="p-4 border-t bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
-                <div id="summaryStatus" class="text-sm font-medium text-slate-600"></div>
+            <div class="p-4 border-t border-slate-700 bg-slate-900 dark:bg-slate-950 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div id="summaryStatus" class="text-sm font-medium text-slate-300"></div>
                 <div class="flex space-x-3">
                     <button onclick="downloadSummaryPng()" id="btnDownloadSummary" disabled
                             class="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold py-2.5 px-5 rounded-xl flex items-center space-x-2 transition shadow-md">
                         <i data-lucide="download" class="w-4 h-4"></i>
                         <span>Descargar PNG</span>
                     </button>
-                    <button onclick="closeSummaryModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-semibold py-2.5 px-5 rounded-xl transition">
+                    <button onclick="closeSummaryModal()" class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold py-2.5 px-5 rounded-xl transition">
                         Cerrar
                     </button>
                 </div>
@@ -373,29 +451,32 @@
         // Variables para Drag & Drop y Orden de Gráficos
         let draggedCol = null;
         let chartSortOrder = 'default';
-        let columnOrderTab3 = ['SST', 'Depto', 'Contratista', 'Responsable', 'Dias', 'MontoMT', 'MontoMO', 'Monto', 'Condicion'];
-        
-        // 🔥 NUEVO: Estado que guarda el ancho de cada columna para persistirlo entre re-renders
+        // 🔥 NUEVO ORDEN DE COLUMNAS (según imagen)
+        let columnOrderTab3 = ['SST', 'Depto', 'Responsable', 'Contratista', 'Dias', 'MontoMT', 'MontoMO', 'Monto', 'Condicion'];
         let columnWidthsTab3 = {};
         
         const columnDefs = {
-            'SST': { label: 'Código SST', sortKey: 'SST', style: 'border-r border-blue-800' },
-            'Depto': { label: 'Departamento Operativo', sortKey: 'Depto', style: 'border-r border-blue-800' },
-            'Contratista': { label: 'Empresa Contratista', sortKey: 'Contratista', style: 'border-r border-blue-800' },
-            'Responsable': { label: 'Sup. Responsable', sortKey: 'Responsable', style: 'border-r border-blue-800' },
-            'Dias': { label: 'Días Pend.', sortKey: 'Dias', style: 'border-r border-blue-800' },
-            'MontoMT': { label: 'Monto Mat. (MT) (S/)', sortKey: 'MontoMT', style: 'border-r border-blue-800' },
-            'MontoMO': { label: 'Monto MO. (MO) (S/)', sortKey: 'MontoMO', style: 'border-r border-blue-800' },
-            'Monto': { label: 'Monto Total Proyectado (S/)', sortKey: 'Monto', style: 'border-r border-blue-800' },
-            'Condicion': { label: 'Condición Plazo', sortKey: 'Condicion', style: '' }
+            'SST': { label: 'CÓDIGO SST', sortKey: 'SST', style: 'border-r border-slate-700' },
+            'Depto': { label: 'DEPARTAMENTO OPERATIVO', sortKey: 'Depto', style: 'border-r border-slate-700' },
+            'Responsable': { label: 'SUP. RESPONSABLE', sortKey: 'Responsable', style: 'border-r border-slate-700' },
+            'Contratista': { label: 'EMPRESA CONTRATISTA', sortKey: 'Contratista', style: 'border-r border-slate-700' },
+            'Dias': { label: 'DÍAS PEND.', sortKey: 'Dias', style: 'border-r border-slate-700' },
+            'MontoMT': { label: 'MONTO MAT. (MT) (S/)', sortKey: 'MontoMT', style: 'border-r border-slate-700' },
+            'MontoMO': { label: 'MONTO MO. (MO) (S/)', sortKey: 'MontoMO', style: 'border-r border-slate-700' },
+            'Monto': { label: 'MONTO TOTAL PROYECTADO (S/)', sortKey: 'Monto', style: 'border-r border-slate-700' },
+            'Condicion': { label: 'CONDICIÓN PLAZO', sortKey: 'Condicion', style: '' }
         };
 
         // ============================================================
-        // INIT
+        // INICIALIZACIÓN Y UI (Ocultar/Mostrar + Tema)
         // ============================================================
         document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
             
+            // Iniciar en Modo Claro por defecto
+            document.documentElement.classList.remove('dark');
+            updateThemeUI();
+
             document.getElementById('excelFile').addEventListener('change', handleFileUpload);
             document.getElementById('filterDepto').addEventListener('change', () => onFilterChange('Depto'));
             document.getElementById('filterResponsable').addEventListener('change', () => onFilterChange('Responsable'));
@@ -409,6 +490,52 @@
             loadFromGoogleSheet();
             if (AUTO_REFRESH_MINUTES > 0) setInterval(() => loadFromGoogleSheet(false), AUTO_REFRESH_MINUTES * 60 * 1000);
         });
+
+        // Lógica Ocultar/Mostrar Header Actions (Actualizar y Subir Excel)
+        let areActionsHidden = true;
+        function toggleActions() {
+            const container = document.getElementById('collapsibleActions');
+            const icon = document.getElementById('eyeIcon');
+            areActionsHidden = !areActionsHidden;
+
+            if (areActionsHidden) {
+                container.classList.remove('show');
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                container.classList.add('show');
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+
+        // Lógica Modo Claro / Oscuro
+        function toggleTheme() {
+            const root = document.documentElement;
+            if (root.classList.contains('dark')) {
+                root.classList.remove('dark');
+            } else {
+                root.classList.add('dark');
+            }
+            updateThemeUI();
+            if(!document.getElementById('tab2Content').classList.contains('hidden')) {
+                renderCharts(); // Actualizar colores de gráficos
+            }
+        }
+
+        function updateThemeUI() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const icon = document.getElementById('themeIcon');
+            const text = document.getElementById('themeText');
+
+            if (isDark) {
+                icon.setAttribute('data-lucide', 'moon');
+                text.innerText = 'Modo oscuro';
+            } else {
+                icon.setAttribute('data-lucide', 'sun');
+                text.innerText = 'Modo claro';
+            }
+            lucide.createIcons();
+        }
 
         // ============================================================
         // GOOGLE SHEETS LOADER
@@ -491,7 +618,6 @@
                 }
                 function mouseUpHandler() {
                     th.classList.remove('resizing');
-                    // 🔥 GUARDAR EL ANCHO: se guarda en el estado para persistir tras re-render
                     const colKey = th.dataset.col;
                     if (colKey) columnWidthsTab3[colKey] = th.style.width;
                     document.removeEventListener('mousemove', mouseMoveHandler);
@@ -622,20 +748,20 @@
             
             const excelData = dataToExport.map(r => ({
                 'Código SST': r.SST,
-                'Departamento': r.Depto,
-                'Contratista': r.Contratista,
-                'Responsable Tecsur': r.Responsable,
-                'Días Pendientes': r.Dias,
-                'Monto MT': r.MontoMT,
-                'Monto MO': r.MontoMO,
-                'Monto Total': r.Monto,
-                'Condición': r.Condicion
+                'Departamento Operativo': r.Depto,
+                'Sup. Responsable': r.Responsable,
+                'Empresa Contratista': r.Contratista,
+                'Días Pend.': r.Dias,
+                'Monto Mat. (MT)': r.MontoMT,
+                'Monto MO. (MO)': r.MontoMO,
+                'Monto Total Proyectado': r.Monto,
+                'Condición Plazo': r.Condicion
             }));
 
             const ws = XLSX.utils.json_to_sheet(excelData);
             
             const wscols = [
-                {wch: 15}, {wch: 35}, {wch: 35}, {wch: 30}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 20}
+                {wch: 15}, {wch: 35}, {wch: 30}, {wch: 35}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 20}
             ];
             ws['!cols'] = wscols;
 
@@ -662,7 +788,7 @@
                     if (R === 0) {
                         cell.s = {
                             font: { bold: true, color: { rgb: "FFFFFF" }, name: 'Arial', size: 11 },
-                            fill: { fgColor: { rgb: "1E3A8A" } }, 
+                            fill: { fgColor: { rgb: "3C5A96" } }, 
                             alignment: { horizontal: "center", vertical: "center" }
                         };
                     }
@@ -752,7 +878,7 @@
         }
 
         // ============================================================
-        // TAB 3: TABLE (con persistencia de anchos)
+        // TAB 3: TABLE
         // ============================================================
         function sortTableTab3(col) {
             if (sortCol3 === col) sortAsc3 = !sortAsc3;
@@ -781,16 +907,18 @@
             columnOrderTab3.forEach(colKey => {
                 const def = columnDefs[colKey];
                 const th = document.createElement('th');
-                th.className = `p-3.5 bg-[#2b308a] hover:bg-[#1a1d59] text-white font-bold uppercase tracking-wider text-center ${def.style}`;
+                // 🔥 COLOR RGB(60, 90, 150) APLICADO
+                th.className = `bg-[#3C5A96] hover:bg-[#2c467a] text-white font-bold uppercase tracking-wider text-center ${def.style} transition-colors`;
                 th.draggable = true;
                 th.dataset.col = colKey;
                 
-                // 🔥 RE-APLICAR ANCHO GUARDADO
                 if (columnWidthsTab3[colKey]) {
                     th.style.width = columnWidthsTab3[colKey];
                 }
                 
-                th.innerHTML = `${def.label} ↕<div class="resizer"></div>`;
+                // 🔥 TEXTO CON MAXIMO 2 SALTOS (usando <br> para forzar o dejando que el CSS lo haga)
+                // Dado que el CSS tiene white-space: normal, solo necesitamos poner el texto y el icono
+                th.innerHTML = `<span class="block">${def.label}</span><span class="block text-[10px] mt-0.5 opacity-80">↕</span><div class="resizer"></div>`;
                 
                 th.onclick = (e) => {
                     if (e.target.classList.contains('resizer')) return;
@@ -829,24 +957,24 @@
 
             data.slice(0, 150).forEach(r => {
                 const tr = document.createElement('tr');
-                tr.className = 'hover:bg-slate-50 transition text-center border-b border-slate-100';
+                tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-700 transition text-center border-b border-slate-100 dark:border-slate-700';
                 
                 columnOrderTab3.forEach(colKey => {
                     const td = document.createElement('td');
                     let content = '';
                     
-                    if (colKey === 'SST') { content = r.SST; td.className = 'p-3 font-bold text-slate-900 border-r border-slate-100'; }
-                    else if (colKey === 'Depto') { content = r.Depto; td.className = 'p-3 text-left border-r border-slate-100'; }
-                    else if (colKey === 'Contratista') { content = r.Contratista; td.className = 'p-3 text-left border-r border-slate-100'; }
-                    else if (colKey === 'Responsable') { content = r.Responsable; td.className = 'p-3 text-left text-slate-600 font-semibold border-r border-slate-100'; }
-                    else if (colKey === 'Dias') { content = `${r.Dias} d`; td.className = 'p-3 font-extrabold text-red-800 bg-red-50/30 border-r border-slate-100'; }
-                    else if (colKey === 'MontoMT') { content = `S/ ${r.MontoMT ? r.MontoMT.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
-                    else if (colKey === 'MontoMO') { content = `S/ ${r.MontoMO ? r.MontoMO.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
-                    else if (colKey === 'Monto') { content = `S/ ${r.Monto ? r.Monto.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right font-extrabold text-[#2b308a] border-r border-slate-100'; }
+                    if (colKey === 'SST') { content = r.SST; td.className = 'p-3 font-bold text-slate-900 dark:text-white border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'Depto') { content = r.Depto; td.className = 'p-3 text-left border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'Responsable') { content = r.Responsable; td.className = 'p-3 text-left text-slate-600 dark:text-slate-300 font-semibold border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'Contratista') { content = r.Contratista; td.className = 'p-3 text-left border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'Dias') { content = `${r.Dias} d`; td.className = 'p-3 font-extrabold text-red-800 dark:text-red-400 bg-red-50/30 dark:bg-red-900/20 border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'MontoMT') { content = `S/ ${r.MontoMT ? r.MontoMT.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 dark:text-slate-300 border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'MontoMO') { content = `S/ ${r.MontoMO ? r.MontoMO.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 dark:text-slate-300 border-r border-slate-100 dark:border-slate-700'; }
+                    else if (colKey === 'Monto') { content = `S/ ${r.Monto ? r.Monto.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right font-extrabold text-blue-800 dark:text-blue-300 border-r border-slate-100 dark:border-slate-700'; }
                     else if (colKey === 'Condicion') { 
                         const isFuera = r.Condicion === 'Fuera de Plazo';
-                        content = `<span class="px-3 py-1 rounded-full text-xs font-bold ${isFuera ? 'badge-fuera' : 'badge-dentro'}">${r.Condicion}</span>`;
-                        td.className = 'p-3 border-r border-slate-100';
+                        content = `<span class="px-3 py-1 rounded-full text-xs font-bold ${isFuera ? 'badge-fuera dark:bg-red-900/40 dark:text-red-300' : 'badge-dentro dark:bg-emerald-900/40 dark:text-emerald-300'}">${r.Condicion}</span>`;
+                        td.className = 'p-3 border-r border-slate-100 dark:border-slate-700';
                     }
                     
                     td.innerHTML = content;
@@ -904,8 +1032,11 @@
 
         function renderCharts() {
             const data = currentFilteredData;
-            
-            // --- Lógica de Ordenamiento para Gráficos ---
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#cbd5e1' : '#0f172a';
+            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+
+            // --- Lógica de Ordenamiento ---
             let dRCant = [...new Set(data.map(d => d.Depto))];
             if (chartSortOrder === 'alpha-asc') dRCant.sort((a, b) => a.localeCompare(b));
             else if (chartSortOrder === 'alpha-desc') dRCant.sort((a, b) => b.localeCompare(a));
@@ -950,11 +1081,14 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { top: 25 } },
-                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT1 * 1.15 } },
+                    scales: { 
+                        x: { stacked: true, ticks: { color: textColor, font: { size: 10, weight: '600' } }, grid: { display: false } }, 
+                        y: { stacked: true, beginAtZero: true, suggestedMax: maxT1 * 1.15, ticks: { color: textColor }, grid: { color: gridColor } } 
+                    },
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { position: 'top', labels: { color: textColor } },
                         datalabels: {
-                            color: '#0f172a', font: { weight: '800', size: 11 }, anchor: 'end', align: 'top',
+                            color: textColor, font: { weight: '800', size: 11 }, anchor: 'end', align: 'top',
                             formatter: (v, ctx) => {
                                 if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
                                     const i = ctx.dataIndex;
@@ -982,10 +1116,13 @@
                 options: {
                     indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { right: 30 } },
-                    scales: { x: { beginAtZero: true, suggestedMax: maxT2 * 1.15 } },
+                    scales: { 
+                        x: { beginAtZero: true, suggestedMax: maxT2 * 1.15, ticks: { color: textColor }, grid: { color: gridColor } },
+                        y: { ticks: { color: textColor }, grid: { display: false } }
+                    },
                     plugins: {
                         legend: { display: false },
-                        datalabels: { color: '#0f172a', font: { weight: '800', size: 11 }, anchor: 'end', align: 'right', formatter: v => v > 0 ? v : '' }
+                        datalabels: { color: textColor, font: { weight: '800', size: 11 }, anchor: 'end', align: 'right', formatter: v => v > 0 ? v : '' }
                     }
                 }
             });
@@ -1010,11 +1147,14 @@
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { top: 25 } },
-                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT3 * 1.15 } },
+                    scales: { 
+                        x: { stacked: true, ticks: { color: textColor, font: { size: 10, weight: '600' } }, grid: { display: false } }, 
+                        y: { stacked: true, beginAtZero: true, suggestedMax: maxT3 * 1.15, ticks: { color: textColor }, grid: { color: gridColor } } 
+                    },
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { position: 'top', labels: { color: textColor } },
                         datalabels: {
-                            color: '#0f172a', font: { weight: '800', size: 10 }, anchor: 'end', align: 'top',
+                            color: textColor, font: { weight: '800', size: 10 }, anchor: 'end', align: 'top',
                             formatter: (v, ctx) => {
                                 if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
                                     const i = ctx.dataIndex;
@@ -1047,11 +1187,14 @@
                 options: {
                     indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { right: 45 } },
-                    scales: { x: { stacked: true, beginAtZero: true, suggestedMax: maxT4 * 1.15 }, y: { stacked: true } },
+                    scales: { 
+                        x: { stacked: true, beginAtZero: true, suggestedMax: maxT4 * 1.15, ticks: { color: textColor }, grid: { color: gridColor } }, 
+                        y: { stacked: true, ticks: { color: textColor }, grid: { display: false } } 
+                    },
                     plugins: {
-                        legend: { position: 'top' },
+                        legend: { position: 'top', labels: { color: textColor } },
                         datalabels: {
-                            color: '#0f172a', font: { weight: '800', size: 10 }, anchor: 'end', align: 'right',
+                            color: textColor, font: { weight: '800', size: 10 }, anchor: 'end', align: 'right',
                             formatter: (v, ctx) => {
                                 if (ctx.datasetIndex === ctx.chart.data.datasets.length - 1) {
                                     const i = ctx.dataIndex;
@@ -1085,8 +1228,8 @@
                 const sectionItems = data.filter(d => sec.match(d.Depto));
                 if (sectionItems.length === 0) {
                     container.innerHTML += `
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                            <div class="bg-slate-900 text-white p-3 font-bold text-xs text-center">${sec.title}</div>
+                        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col transition-colors">
+                            <div class="bg-slate-900 dark:bg-slate-950 text-white p-3 font-bold text-xs text-center">${sec.title}</div>
                             <div class="p-6 text-center text-xs text-slate-400">Sin registros para esta sección</div>
                         </div>
                     `;
@@ -1098,12 +1241,12 @@
                 let secTotalMonto = 0;
 
                 let sectionHtml = `
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                        <div class="bg-slate-900 text-white p-3 text-center space-y-1">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col transition-colors">
+                        <div class="bg-slate-900 dark:bg-slate-950 text-white p-3 text-center space-y-1">
                             <div class="font-extrabold text-xs tracking-wide">${sec.title}</div>
                             <div class="text-[10px] text-red-400 font-bold uppercase">Letras rojas: Días pendientes de revisión</div>
                         </div>
-                        <div class="p-3 space-y-3 bg-slate-50/50 flex-grow">
+                        <div class="p-3 space-y-3 bg-slate-50/50 dark:bg-slate-800/50 flex-grow">
                 `;
 
                 deptosInSec.forEach(depto => {
@@ -1115,7 +1258,7 @@
                     secTotalMonto += deptoMonto;
 
                     sectionHtml += `
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 shadow-sm overflow-hidden">
                             <div class="bg-emerald-700 text-white px-3 py-2 font-bold text-[11px] flex justify-between items-center">
                                 <span class="truncate pr-2" title="${depto}">${depto}</span>
                                 <div class="flex items-center space-x-2 shrink-0">
@@ -1123,10 +1266,11 @@
                                     <span>S/ ${(deptoMonto).toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
                                 </div>
                             </div>
-                            <div class="p-2 divide-y divide-slate-100">
+                            <div class="p-2 divide-y divide-slate-100 dark:divide-slate-600">
                     `;
 
-                    const supervisores = [...new Set(deptoItems.map(d => d.Responsable))];
+                    // 🔥 ORDEN ALFABÉTICO DE SUPERVISORES
+                    const supervisores = [...new Set(deptoItems.map(d => d.Responsable))].sort((a, b) => a.localeCompare(b));
                     let hasVisibleSup = false;
 
                     supervisores.forEach(sup => {
@@ -1153,24 +1297,24 @@
                         Object.keys(daysGroupMap).sort((a,b) => Number(a)-Number(b)).forEach(day => {
                             const info = daysGroupMap[day];
                             daysDetailHtml += `
-                                <div class="flex items-center justify-between text-[11px] bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                <div class="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-600">
                                     <div class="flex items-center space-x-2">
-                                        <span class="text-red-600 font-black w-5 text-right">${day}</span>
-                                        <span class="text-slate-800 font-bold w-5 text-center">${info.count}</span>
+                                        <span class="text-red-600 dark:text-red-400 font-black w-5 text-right">${day}</span>
+                                        <span class="text-slate-800 dark:text-white font-bold w-5 text-center">${info.count}</span>
                                     </div>
-                                    <span class="text-slate-900 font-semibold">S/ ${info.monto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
+                                    <span class="text-slate-900 dark:text-slate-300 font-semibold">S/ ${info.monto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
                                 </div>
                             `;
                         });
                         daysDetailHtml += `</div>`;
 
                         sectionHtml += `
-                            <div class="py-2 px-2 space-y-1.5 hover:bg-slate-50 transition rounded-lg">
-                                <div class="font-bold text-[11px] text-slate-800 truncate" title="${sup}">${sup}</div>
+                            <div class="py-2 px-2 space-y-1.5 hover:bg-slate-50 dark:hover:bg-slate-600 transition rounded-lg">
+                                <div class="font-bold text-[11px] text-slate-800 dark:text-white truncate" title="${sup}">${sup}</div>
                                 <div>${daysDetailHtml}</div>
-                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-semibold px-1 pt-0.5">
-                                    <span>Total SST's: <strong class="text-slate-900">${supSSTCount}</strong></span>
-                                    <span>Monto: <strong class="text-purple-700">S/ ${supMonto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</strong></span>
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-semibold px-1 pt-0.5">
+                                    <span>Total SST's: <strong class="text-slate-900 dark:text-white">${supSSTCount}</strong></span>
+                                    <span>Monto: <strong class="text-purple-700 dark:text-purple-400">S/ ${supMonto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</strong></span>
                                 </div>
                             </div>
                         `;
@@ -1184,7 +1328,7 @@
                 });
 
                 sectionHtml += `
-                        <div class="bg-slate-900 text-white p-2.5 rounded-xl font-black text-xs flex justify-between items-center shadow-inner mt-2">
+                        <div class="bg-slate-900 dark:bg-slate-950 text-white p-2.5 rounded-xl font-black text-xs flex justify-between items-center shadow-inner mt-2">
                             <span>TOTAL GENERAL</span>
                             <div class="flex items-center space-x-3">
                                 <span>${secTotalSST} SST's</span>
@@ -1258,14 +1402,15 @@
                 const now = new Date();
                 _summaryFilename = `Reporte_Planos_${now.toISOString().slice(0, 10)}_${now.toTimeString().slice(0, 5).replace(':', '-')}.png`;
 
-                status.innerText = 'Generando PNG en Full HD...';
+                status.innerText = 'Generando PNG en Full HD / 4K...';
                 const capture = document.getElementById('summaryCapture');
+                
                 _summaryCanvas = await html2canvas(capture, {
-                    scale: 3,
-                    backgroundColor: '#f8fafc',
+                    scale: 4, // Escala alta para 4K
+                    backgroundColor: '#ffffff', // Fondo Blanco Limpio
                     useCORS: true,
                     logging: false,
-                    windowWidth: 2000
+                    windowWidth: 2400 // Ancho base amplio
                 });
                 if (_summaryCancelled) return;
 
@@ -1392,7 +1537,8 @@
                             <div style="padding:10px;display:flex;flex-direction:column;gap:8px;">
                     `;
 
-                    const supervisores = [...new Set(deptoItems.map(d => d.Responsable))];
+                    // ORDEN ALFABÉTICO EN EL PNG TAMBIÉN
+                    const supervisores = [...new Set(deptoItems.map(d => d.Responsable))].sort((a, b) => a.localeCompare(b));
 
                     supervisores.forEach(sup => {
                         const supItems = deptoItems.filter(d => d.Responsable === sup);
@@ -1410,23 +1556,24 @@
                         let daysDetailHtml = `<div style="display:flex;flex-direction:column;gap:6px;width:100%;margin-top:8px;">`;
                         Object.keys(daysGroupMap).sort((a,b) => Number(a)-Number(b)).forEach(day => {
                             const info = daysGroupMap[day];
+                            // 🔥 CENTRADO VERTICAL FORZADO EN EL PNG
                             daysDetailHtml += `
-                                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;background:#f8fafc;padding:6px 12px;border-radius:6px;border:1px solid #e2e8f0;">
-                                    <div style="display:flex;align-items:center;gap:12px;">
-                                        <span style="color:#b91c1c;font-weight:900;width:24px;text-align:right;">${day}</span>
-                                        <span style="color:#0f172a;font-weight:800;width:24px;text-align:center;">${info.count}</span>
+                                <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;background:#f8fafc;padding:8px 12px;border-radius:6px;border:1px solid #e2e8f0;min-height:32px;box-sizing:border-box;">
+                                    <div style="display:flex;align-items:center;gap:12px;height:100%;">
+                                        <span style="color:#b91c1c;font-weight:900;width:24px;text-align:right;line-height:1;">${day}</span>
+                                        <span style="color:#0f172a;font-weight:800;width:24px;text-align:center;line-height:1;">${info.count}</span>
                                     </div>
-                                    <span style="color:#334155;font-weight:700;">S/ ${info.monto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
+                                    <span style="color:#334155;font-weight:700;line-height:1;">S/ ${info.monto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</span>
                                 </div>
                             `;
                         });
                         daysDetailHtml += `</div>`;
 
                         html += `
-                            <div style="padding:12px;border-bottom:1px solid #f1f5f9;background:#fff;">
+                            <div style="padding:16px 16px 24px 16px; border-bottom:1px solid #f1f5f9; background:#fff; border-radius: 0 0 12px 12px;">
                                 <div style="font-weight:800;font-size:14px;color:#1e293b;margin-bottom:4px;">${sup}</div>
                                 ${daysDetailHtml}
-                                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#64748b;font-weight:700;margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#64748b;font-weight:700;margin-top:16px;padding-top:12px;border-top:1px dashed #e2e8f0;">
                                     <span>Total SST's: <strong style="color:#0f172a;font-size:14px;">${supSSTCount}</strong></span>
                                     <span>Monto: <strong style="color:#7e22ce;font-size:14px;">S/ ${supMonto.toLocaleString('es-PE', {minimumFractionDigits: 2})}</strong></span>
                                 </div>
@@ -1438,7 +1585,7 @@
                 });
 
                 html += `
-                        <div style="background:#0f172a;color:#fff;padding:16px;border-radius:12px;font-weight:900;font-size:15px;display:flex;justify-content:space-between;align-items:center;margin-top:auto;">
+                        <div style="background:#0f172a;color:#fff;padding:16px;border-radius:12px;font-weight:900;font-size:15px;display:flex;justify-content:space-between;align-items:center;margin-top:auto; margin-bottom:24px;">
                             <span>TOTAL GENERAL</span>
                             <div style="display:flex;gap:16px;">
                                 <span>${secTotalSST} SST's</span>
@@ -1451,8 +1598,9 @@
                 reporteHtml += html;
             });
 
+            // 🔥 FORMATO A4 (Proporción 1:1.414)
             return `
-            <div id="summaryCapture" style="width:1800px;padding:50px;background:#f8fafc;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#0f172a;box-sizing:border-box;">
+            <div id="summaryCapture" style="width:2200px;min-height:3110px;padding:50px;background:#ffffff;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#0f172a;box-sizing:border-box;display:flex;flex-direction:column;">
                 
                 <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;padding:40px;border-radius:24px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 10px 25px rgba(0,0,0,0.1);">
                     <div>
@@ -1488,7 +1636,7 @@
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:start;width:100%;">
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:start;width:100%;flex-grow:1;">
                     ${reporteHtml}
                 </div>
 
