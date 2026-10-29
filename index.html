@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
@@ -23,10 +23,11 @@
         
         table { table-layout: fixed; width: 100%; }
         th, td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        th { position: relative; user-select: none; }
-        th:hover { filter: brightness(0.9); cursor: grab; }
+        th { position: relative; user-select: none; cursor: grab; }
         th:active { cursor: grabbing; }
-        .resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; user-select: none; touch-action: none; z-index: 10; }
+        th.dragging { opacity: 0.5; background-color: #1e293b !important; border: 2px dashed #60a5fa; }
+        
+        .resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; cursor: col-resize; user-select: none; touch-action: none; z-index: 20; }
         .resizer:hover, .resizing { background-color: #60a5fa; }
         
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -87,17 +88,25 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs -->
-        <div class="flex flex-wrap gap-2 bg-slate-200/80 p-1.5 rounded-2xl w-fit">
-            <button id="tab1Btn" onclick="switchTab('tab1')" class="tab-btn active px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
-                <i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>1. Reporte Jerárquico</span>
-            </button>
-            <button id="tab2Btn" onclick="switchTab('tab2')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
-                <i data-lucide="bar-chart-3" class="w-4 h-4"></i><span>2. Resumen General y Gráficos</span>
-            </button>
-            <button id="tab3Btn" onclick="switchTab('tab3')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
-                <i data-lucide="table" class="w-4 h-4"></i><span>3. Detalle Operativo</span>
-            </button>
+        <!-- Navigation Tabs & External Button -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex flex-wrap gap-2 bg-slate-200/80 p-1.5 rounded-2xl w-fit">
+                <button id="tab1Btn" onclick="switchTab('tab1')" class="tab-btn active px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i><span>1. Reporte Jerárquico</span>
+                </button>
+                <button id="tab2Btn" onclick="switchTab('tab2')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4"></i><span>2. Resumen General y Gráficos</span>
+                </button>
+                <button id="tab3Btn" onclick="switchTab('tab3')" class="tab-btn px-4 py-2 rounded-xl text-xs font-medium text-slate-600 transition flex items-center space-x-2">
+                    <i data-lucide="table" class="w-4 h-4"></i><span>3. Detalle Operativo</span>
+                </button>
+            </div>
+
+            <a href="https://ldsweb.luzdelsur.com.pe/Plataforma/PlataformaWeb/" target="_blank" 
+               class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 px-5 rounded-xl flex items-center space-x-2 transition shadow-md hover:shadow-lg">
+                <i data-lucide="external-link" class="w-4 h-4"></i>
+                <span>Ir a aprobar planos</span>
+            </a>
         </div>
 
         <!-- KPI Cards -->
@@ -144,17 +153,30 @@
             </div>
         </div>
 
-        <!-- Filters -->
+        <!-- Filters Section -->
         <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
                 <h2 class="text-sm font-bold text-slate-800 flex items-center space-x-2">
                     <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
-                    <span>Control de Filtrado Dinámico e Interconectado</span>
+                    <span>Control de Filtrado</span>
                 </h2>
-                <button id="btnReset" class="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center space-x-1 transition">
-                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i><span>Restablecer Filtros</span>
-                </button>
+                
+                <div class="flex items-center space-x-3">
+                    <button onclick="downloadExcel(false)" class="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i><span>Descargar Todo</span>
+                    </button>
+                    <button onclick="downloadExcel(true)" class="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                        <i data-lucide="filter" class="w-3.5 h-3.5"></i><span>Descargar Filtrado</span>
+                    </button>
+                    
+                    <div class="w-px h-6 bg-slate-300 mx-1"></div>
+
+                    <button id="btnReset" class="text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 py-1.5 px-3 rounded-lg flex items-center space-x-1 transition shadow-sm">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i><span>Limpiar</span>
+                    </button>
+                </div>
             </div>
+            
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Departamentos</label>
@@ -163,19 +185,19 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todas las Contratistas</label>
-                    <select id="filterContratista" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
-                        <option value="ALL">Todas las Contratistas</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todos los Sup. Responsables</label>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Sup. Responsables</label>
                     <select id="filterResponsable" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
                         <option value="ALL">Todos los Sup. Responsables</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Todas las Condiciones</label>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Contratistas</label>
+                    <select id="filterContratista" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="ALL">Todas las Contratistas</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Condiciones</label>
                     <select id="filterPlazo" class="w-full text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
                         <option value="ALL">Todas las Condiciones</option>
                         <option value="Fuera de Plazo">Fuera de Plazo</option>
@@ -189,8 +211,8 @@
             <div class="bg-blue-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-blue-600">
                 <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
             </div>
-            <h3 class="text-lg font-bold text-slate-800">Esperando datos de la pestaña "Fuente"</h3>
-            <p class="text-sm text-slate-500 max-w-md mx-auto">Sube tu Excel o sincroniza con Google Sheets. El sistema leerá automáticamente la pestaña "Fuente" y calculará los montos totales.</p>
+            <h3 class="text-lg font-bold text-slate-800">Esperando datos de la hoja "Base Datos"</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto">Sube tu Excel o sincroniza con Google Sheets. El sistema leerá automáticamente la pestaña "Base Datos".</p>
         </div>
 
         <!-- TAB 1: Reporte Jerárquico -->
@@ -243,6 +265,24 @@
                         <span>Top Contratistas por Monto Proyectado (S/)</span>
                     </h3>
                     <div class="relative h-80"><canvas id="chartMontoContra"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Opciones de Visualización (movido al final) -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="arrow-up-down" class="w-5 h-5 text-blue-600"></i>
+                    <h3 class="text-sm font-bold text-slate-800">Opciones de Visualización</h3>
+                </div>
+                <div class="flex items-center space-x-2 w-full sm:w-auto">
+                    <label class="text-xs font-semibold text-slate-600 shrink-0">Ordenar gráficos:</label>
+                    <select id="chartSortSelect" onchange="changeChartSort()" class="w-full sm:w-auto text-xs font-medium border-slate-200 rounded-xl shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-slate-50 p-2.5 border">
+                        <option value="default">Orden Original</option>
+                        <option value="cant-desc">Cantidad / Monto (Mayor a Menor)</option>
+                        <option value="cant-asc">Cantidad / Monto (Menor a Mayor)</option>
+                        <option value="alpha-asc">Alfabético (A-Z)</option>
+                        <option value="alpha-desc">Alfabético (Z-A)</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -312,12 +352,9 @@
         // ============================================================
         // CONFIG & STATE
         // ============================================================
-        // NOTA: Asegúrate de que la pestaña "Fuente" sea la primera en tu Google Sheet 
-        // o usa el parámetro &gid=ID_DE_LA_PESTAÑA en la URL.
         const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0rTTydjXTfHv0EnOhKmY0LzPrmaXAueCCvOgz12imqnF8_zNUOtyfuMUlLR70UEIEnkMl_v0135M3/pub?output=csv";
         const AUTO_REFRESH_MINUTES = 5;
         const FETCH_TIMEOUT_MS = 15000;
-        const COLOR_DARK_BLUE = '#2b308a'; 
 
         let rawData = [];
         let currentFilteredData = [];
@@ -333,8 +370,13 @@
         let _summaryCancelled = false;
         let _summaryCanvas = null;
 
+        // Variables para Drag & Drop y Orden de Gráficos
         let draggedCol = null;
+        let chartSortOrder = 'default';
         let columnOrderTab3 = ['SST', 'Depto', 'Contratista', 'Responsable', 'Dias', 'MontoMT', 'MontoMO', 'Monto', 'Condicion'];
+        
+        // 🔥 NUEVO: Estado que guarda el ancho de cada columna para persistirlo entre re-renders
+        let columnWidthsTab3 = {};
         
         const columnDefs = {
             'SST': { label: 'Código SST', sortKey: 'SST', style: 'border-r border-blue-800' },
@@ -356,8 +398,8 @@
             
             document.getElementById('excelFile').addEventListener('change', handleFileUpload);
             document.getElementById('filterDepto').addEventListener('change', () => onFilterChange('Depto'));
-            document.getElementById('filterContratista').addEventListener('change', () => onFilterChange('Contratista'));
             document.getElementById('filterResponsable').addEventListener('change', () => onFilterChange('Responsable'));
+            document.getElementById('filterContratista').addEventListener('change', () => onFilterChange('Contratista'));
             document.getElementById('filterPlazo').addEventListener('change', () => onFilterChange('Plazo'));
             
             document.getElementById('searchInputTab3').addEventListener('input', applyFiltersAndRender);
@@ -428,25 +470,33 @@
         // HELPERS
         // ============================================================
         function initResizers() {
-            document.querySelectorAll('table').forEach(table => {
-                table.querySelectorAll('th').forEach(th => {
-                    const resizer = th.querySelector('.resizer');
-                    if (!resizer) return;
-                    let x = 0, w = 0;
-                    resizer.addEventListener('mousedown', function (e) {
-                        e.stopPropagation();
-                        x = e.clientX; w = th.offsetWidth;
-                        th.classList.add('resizing');
-                        document.addEventListener('mousemove', mouseMoveHandler);
-                        document.addEventListener('mouseup', mouseUpHandler);
-                    });
-                    function mouseMoveHandler(e) { th.style.width = `${w + (e.clientX - x)}px`; }
-                    function mouseUpHandler() {
-                        th.classList.remove('resizing');
-                        document.removeEventListener('mousemove', mouseMoveHandler);
-                        document.removeEventListener('mouseup', mouseUpHandler);
-                    }
+            document.querySelectorAll('#tableTab3 th').forEach(th => {
+                const resizer = th.querySelector('.resizer');
+                if (!resizer) return;
+                
+                resizer.draggable = false;
+
+                let x = 0, w = 0;
+                resizer.addEventListener('mousedown', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    x = e.clientX; w = th.offsetWidth;
+                    th.classList.add('resizing');
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
                 });
+                function mouseMoveHandler(e) { 
+                    const dx = e.clientX - x; 
+                    th.style.width = `${w + dx}px`; 
+                }
+                function mouseUpHandler() {
+                    th.classList.remove('resizing');
+                    // 🔥 GUARDAR EL ANCHO: se guarda en el estado para persistir tras re-render
+                    const colKey = th.dataset.col;
+                    if (colKey) columnWidthsTab3[colKey] = th.style.width;
+                    document.removeEventListener('mousemove', mouseMoveHandler);
+                    document.removeEventListener('mouseup', mouseUpHandler);
+                }
             });
         }
 
@@ -471,14 +521,7 @@
             reader.onload = (event) => {
                 const data = new Uint8Array(event.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
-                
-                // Buscar explícitamente la pestaña "Fuente"
-                const sheetName = workbook.SheetNames.includes('Fuente') ? 'Fuente' : workbook.SheetNames[0];
-                
-                if (!workbook.SheetNames.includes('Fuente')) {
-                    console.warn("No se encontró la pestaña 'Fuente'. Usando la primera pestaña.");
-                }
-
+                const sheetName = workbook.SheetNames.includes('Base Datos') ? 'Base Datos' : workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                 processExcelRows(json);
@@ -494,7 +537,6 @@
             return s;
         }
 
-        // Función auxiliar para buscar columnas de forma flexible
         function findCol(headers, possibleNames) {
             for (let name of possibleNames) {
                 const idx = headers.indexOf(name);
@@ -515,30 +557,25 @@
             for (let i = 0; i < Math.min(20, json.length); i++) {
                 if (json[i] && (json[i].includes('SST') || json[i].includes('Departamento'))) { headerIdx = i; break; }
             }
-            if (headerIdx === -1) { alert('No se encontró la cabecera del reporte en la Fuente.'); return; }
+            if (headerIdx === -1) { alert('No se encontró la cabecera del reporte en la Base Datos.'); return; }
 
             const headers = json[headerIdx].map(h => cleanCell(h));
             const rows = json.slice(headerIdx + 1);
             
-            // Búsqueda flexible de columnas
-            const sstCol = findCol(headers, ['SST', 'Código SST', 'SST ']);
-            const deptoCol = findCol(headers, ['Departamento', 'Departamento Operativo']);
-            const contraCol = findCol(headers, ['Contratista', 'Empresa Contratista']);
-            const respCol = findCol(headers, ['Responsable Tecsur', 'Sup. Responsable', 'Responsable']);
-            const diasCol = findCol(headers, ['Días pendientes Revisión 1', 'Días Pend.', 'Dias']);
-            
-            // Búsqueda específica de Montos MT y MO
-            const mtCol = findCol(headers, ['Monto MT', 'Monto MT Proyectado', 'MT', 'Monto Mat. (MT)']);
-            const moCol = findCol(headers, ['Monto MO', 'Monto MO Proyectado', 'MO', 'Monto MO. (MO)']);
-            
-            const plazoCol = findCol(headers, ['CORRESPONDE PLANO', 'Condición', 'Condicion']);
+            const sstCol = findCol(headers, ['SST']);
+            const deptoCol = findCol(headers, ['Departamento']);
+            const contraCol = findCol(headers, ['Contratista']);
+            const respCol = findCol(headers, ['Responsable Tecsur']);
+            const diasCol = findCol(headers, ['Días pendientes Revisión 1']);
+            const mtCol = findCol(headers, ['Monto MT Proyectado']);
+            const moCol = findCol(headers, ['Monto MO Proyectado']);
+            const plazoCol = findCol(headers, ['CORRESPONDE PLANO']);
 
             const parsedData = [];
             rows.forEach(r => {
                 const deptoVal = cleanCell(r[deptoCol]) || 'SIN ASIGNAR';
                 if (deptoVal && deptoVal !== 'SIN ASIGNAR' && deptoVal !== 'nan' && (r[sstCol] || r[deptoCol])) {
                     
-                    // CÁLCULO FORZADO: Monto Total = Monto MT + Monto MO
                     const montoMT = parseFloat(cleanCell(r[mtCol])) || 0;
                     const montoMO = parseFloat(cleanCell(r[moCol])) || 0;
                     const montoTotal = montoMT + montoMO;
@@ -551,7 +588,7 @@
                         Dias: parseInt(cleanCell(r[diasCol])) || 0,
                         MontoMT: montoMT,
                         MontoMO: montoMO,
-                        Monto: montoTotal, // Se asigna la suma calculada
+                        Monto: montoTotal,
                         Condicion: cleanCell(r[plazoCol]) || 'Dentro de plazo'
                     });
                 }
@@ -568,30 +605,94 @@
                 document.getElementById('tab1Content').classList.remove('hidden');
                 resetFilters();
             } else {
-                alert('El archivo se cargó pero no se encontraron filas con datos válidos en la Fuente.');
+                alert('El archivo se cargó pero no se encontraron filas con datos válidos.');
             }
         }
 
         // ============================================================
-        // FILTERS
+        // FILTERS & DOWNLOAD EXCEL
         // ============================================================
+        function downloadExcel(filteredOnly) {
+            if (rawData.length === 0) {
+                alert('No hay datos para exportar.');
+                return;
+            }
+
+            const dataToExport = filteredOnly ? currentFilteredData : rawData;
+            
+            const excelData = dataToExport.map(r => ({
+                'Código SST': r.SST,
+                'Departamento': r.Depto,
+                'Contratista': r.Contratista,
+                'Responsable Tecsur': r.Responsable,
+                'Días Pendientes': r.Dias,
+                'Monto MT': r.MontoMT,
+                'Monto MO': r.MontoMO,
+                'Monto Total': r.Monto,
+                'Condición': r.Condicion
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            
+            const wscols = [
+                {wch: 15}, {wch: 35}, {wch: 35}, {wch: 30}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 20}, {wch: 20}
+            ];
+            ws['!cols'] = wscols;
+
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const cellAddress = { c: C, r: R };
+                    const cellRef = XLSX.utils.encode_cell(cellAddress);
+                    let cell = ws[cellRef];
+                    
+                    if (!cell) continue;
+
+                    if (R > 0 && (C === 5 || C === 6 || C === 7)) {
+                        cell.t = 'n';
+                        cell.z = '#,##0.00';
+                        cell.s = {
+                            alignment: { horizontal: 'right' },
+                            font: { name: 'Arial', size: 10 }
+                        };
+                    } else if (R > 0) {
+                        cell.s = { font: { name: 'Arial', size: 10 } };
+                    }
+                    
+                    if (R === 0) {
+                        cell.s = {
+                            font: { bold: true, color: { rgb: "FFFFFF" }, name: 'Arial', size: 11 },
+                            fill: { fgColor: { rgb: "1E3A8A" } }, 
+                            alignment: { horizontal: "center", vertical: "center" }
+                        };
+                    }
+                }
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Planos");
+            
+            const filename = filteredOnly ? 'Planos_Filtrados.xlsx' : 'Planos_Totales.xlsx';
+            XLSX.writeFile(wb, filename);
+        }
+
         function onFilterChange(src) { updateFilterDropdowns(rawData, src); applyFiltersAndRender(); }
 
         function updateFilterDropdowns(baseData, changedSource) {
             if (!baseData || baseData.length === 0) return;
             const curD = document.getElementById('filterDepto').value;
-            const curC = document.getElementById('filterContratista').value;
             const curR = document.getElementById('filterResponsable').value;
+            const curC = document.getElementById('filterContratista').value;
             const curP = document.getElementById('filterPlazo').value;
 
             const aD = baseData.filter(d => (curC === 'ALL' || d.Contratista === curC) && (curR === 'ALL' || d.Responsable === curR) && (curP === 'ALL' || d.Condicion === curP));
-            const aC = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curR === 'ALL' || d.Responsable === curR) && (curP === 'ALL' || d.Condicion === curP));
             const aR = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curC === 'ALL' || d.Contratista === curC) && (curP === 'ALL' || d.Condicion === curP));
-            const aP = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curC === 'ALL' || d.Contratista === curC) && (curR === 'ALL' || d.Responsable === curR));
+            const aC = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curR === 'ALL' || d.Responsable === curR) && (curP === 'ALL' || d.Condicion === curP));
+            const aP = baseData.filter(d => (curD === 'ALL' || d.Depto === curD) && (curR === 'ALL' || d.Responsable === curR) && (curC === 'ALL' || d.Contratista === curC));
 
             if (changedSource !== 'Depto') populateSelect('filterDepto', [...new Set(aD.map(d => d.Depto))].sort(), curD, 'Todos los Departamentos');
-            if (changedSource !== 'Contratista') populateSelect('filterContratista', [...new Set(aC.map(d => d.Contratista))].sort(), curC, 'Todas las Contratistas');
             if (changedSource !== 'Responsable') populateSelect('filterResponsable', [...new Set(aR.map(d => d.Responsable))].sort(), curR, 'Todos los Sup. Responsables');
+            if (changedSource !== 'Contratista') populateSelect('filterContratista', [...new Set(aC.map(d => d.Contratista))].sort(), curC, 'Todas las Contratistas');
             if (changedSource !== 'Plazo') populateSelect('filterPlazo', [...new Set(aP.map(d => d.Condicion))].sort(), curP, 'Todas las Condiciones');
         }
 
@@ -614,7 +715,7 @@
 
         function resetFilters() {
             if (rawData.length === 0) return;
-            ['filterDepto', 'filterContratista', 'filterResponsable', 'filterPlazo'].forEach(id => document.getElementById(id).value = 'ALL');
+            ['filterDepto', 'filterResponsable', 'filterContratista', 'filterPlazo'].forEach(id => document.getElementById(id).value = 'ALL');
             document.getElementById('searchInputTab3').value = '';
             document.getElementById('searchInputHierarchical').value = '';
             sortCol3 = '';
@@ -625,15 +726,15 @@
         function applyFiltersAndRender() {
             if (rawData.length === 0) return;
             const depto = document.getElementById('filterDepto').value;
-            const contra = document.getElementById('filterContratista').value;
             const resp = document.getElementById('filterResponsable').value;
+            const contra = document.getElementById('filterContratista').value;
             const plazo = document.getElementById('filterPlazo').value;
             const s3 = document.getElementById('searchInputTab3').value.toLowerCase();
 
             currentFilteredData = rawData.filter(d =>
                 (depto === 'ALL' || d.Depto === depto) &&
-                (contra === 'ALL' || d.Contratista === contra) &&
                 (resp === 'ALL' || d.Responsable === resp) &&
+                (contra === 'ALL' || d.Contratista === contra) &&
                 (plazo === 'ALL' || d.Condicion === plazo));
 
             const filteredTable3 = currentFilteredData.filter(d => !s3 ||
@@ -651,7 +752,7 @@
         }
 
         // ============================================================
-        // TAB 3: TABLE
+        // TAB 3: TABLE (con persistencia de anchos)
         // ============================================================
         function sortTableTab3(col) {
             if (sortCol3 === col) sortAsc3 = !sortAsc3;
@@ -680,9 +781,15 @@
             columnOrderTab3.forEach(colKey => {
                 const def = columnDefs[colKey];
                 const th = document.createElement('th');
-                th.className = `p-3.5 bg-[#2b308a] hover:bg-[#1a1d59] text-white font-bold uppercase tracking-wider text-center ${def.style} cursor-grab active:cursor-grabbing`;
+                th.className = `p-3.5 bg-[#2b308a] hover:bg-[#1a1d59] text-white font-bold uppercase tracking-wider text-center ${def.style}`;
                 th.draggable = true;
                 th.dataset.col = colKey;
+                
+                // 🔥 RE-APLICAR ANCHO GUARDADO
+                if (columnWidthsTab3[colKey]) {
+                    th.style.width = columnWidthsTab3[colKey];
+                }
+                
                 th.innerHTML = `${def.label} ↕<div class="resizer"></div>`;
                 
                 th.onclick = (e) => {
@@ -690,8 +797,22 @@
                     sortTableTab3(def.sortKey);
                 };
                 
-                th.ondragstart = (e) => { draggedCol = colKey; };
-                th.ondragover = (e) => { e.preventDefault(); };
+                th.ondragstart = (e) => { 
+                    if (e.target.classList.contains('resizer')) {
+                        e.preventDefault(); 
+                        return;
+                    }
+                    draggedCol = colKey; 
+                    th.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                };
+                th.ondragend = (e) => {
+                    th.classList.remove('dragging');
+                };
+                th.ondragover = (e) => { 
+                    e.preventDefault(); 
+                    e.dataTransfer.dropEffect = 'move';
+                };
                 th.ondrop = (e) => { 
                     e.preventDefault();
                     if (draggedCol && draggedCol !== colKey) {
@@ -721,7 +842,6 @@
                     else if (colKey === 'Dias') { content = `${r.Dias} d`; td.className = 'p-3 font-extrabold text-red-800 bg-red-50/30 border-r border-slate-100'; }
                     else if (colKey === 'MontoMT') { content = `S/ ${r.MontoMT ? r.MontoMT.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
                     else if (colKey === 'MontoMO') { content = `S/ ${r.MontoMO ? r.MontoMO.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right text-slate-600 border-r border-slate-100'; }
-                    // MONTO TOTAL: Se muestra la suma calculada
                     else if (colKey === 'Monto') { content = `S/ ${r.Monto ? r.Monto.toLocaleString('es-PE', {minimumFractionDigits: 2}) : '0.00'}`; td.className = 'p-3 text-right font-extrabold text-[#2b308a] border-r border-slate-100'; }
                     else if (colKey === 'Condicion') { 
                         const isFuera = r.Condicion === 'Fuera de Plazo';
@@ -746,7 +866,6 @@
             const fuera = data.filter(d => d.Condicion === 'Fuera de Plazo').length;
             const dentro = total - fuera;
             
-            // Los montos se toman del objeto calculado (MT + MO)
             const montoMT = data.reduce((a, c) => a + (c.MontoMT || 0), 0);
             const montoMO = data.reduce((a, c) => a + (c.MontoMO || 0), 0);
             const montoTotal = montoMT + montoMO; 
@@ -765,6 +884,13 @@
             }
         }
 
+        function changeChartSort() {
+            chartSortOrder = document.getElementById('chartSortSelect').value;
+            if(!document.getElementById('tab2Content').classList.contains('hidden')) {
+                renderCharts();
+            }
+        }
+
         function formatFullDeptos(deptos) {
             return deptos.map(dep => {
                 if (dep.length > 18) {
@@ -778,27 +904,53 @@
 
         function renderCharts() {
             const data = currentFilteredData;
-            const dR = [...new Set(data.map(d => d.Depto))];
-            const dF = formatFullDeptos(dR);
-            const f = dR.map(dep => data.filter(d => d.Depto === dep && d.Condicion === 'Fuera de Plazo').length);
-            const dn = dR.map(dep => data.filter(d => d.Depto === dep && d.Condicion !== 'Fuera de Plazo').length);
-            const tot = dR.map((_, i) => f[i] + dn[i]);
-            const maxT = Math.max(...tot, 0);
+            
+            // --- Lógica de Ordenamiento para Gráficos ---
+            let dRCant = [...new Set(data.map(d => d.Depto))];
+            if (chartSortOrder === 'alpha-asc') dRCant.sort((a, b) => a.localeCompare(b));
+            else if (chartSortOrder === 'alpha-desc') dRCant.sort((a, b) => b.localeCompare(a));
+            else if (chartSortOrder === 'cant-desc') dRCant.sort((a, b) => data.filter(d => d.Depto === b).length - data.filter(d => d.Depto === a).length);
+            else if (chartSortOrder === 'cant-asc') dRCant.sort((a, b) => data.filter(d => d.Depto === a).length - data.filter(d => d.Depto === b).length);
+
+            let cRCant = [...new Set(data.map(d => d.Contratista))];
+            if (chartSortOrder === 'alpha-asc') cRCant.sort((a, b) => a.localeCompare(b));
+            else if (chartSortOrder === 'alpha-desc') cRCant.sort((a, b) => b.localeCompare(a));
+            else if (chartSortOrder === 'cant-desc') cRCant.sort((a, b) => data.filter(d => d.Contratista === b).length - data.filter(d => d.Contratista === a).length);
+            else if (chartSortOrder === 'cant-asc') cRCant.sort((a, b) => data.filter(d => d.Contratista === a).length - data.filter(d => d.Contratista === b).length);
+
+            let dRMonto = [...new Set(data.map(d => d.Depto))];
+            if (chartSortOrder === 'alpha-asc') dRMonto.sort((a, b) => a.localeCompare(b));
+            else if (chartSortOrder === 'alpha-desc') dRMonto.sort((a, b) => b.localeCompare(a));
+            else if (chartSortOrder === 'cant-desc') dRMonto.sort((a, b) => data.filter(d => d.Depto === b).reduce((sum, x) => sum + x.Monto, 0) - data.filter(d => d.Depto === a).reduce((sum, x) => sum + x.Monto, 0));
+            else if (chartSortOrder === 'cant-asc') dRMonto.sort((a, b) => data.filter(d => d.Depto === a).reduce((sum, x) => sum + x.Monto, 0) - data.filter(d => d.Depto === b).reduce((sum, x) => sum + x.Monto, 0));
+
+            let cRMonto = [...new Set(data.map(d => d.Contratista))];
+            if (chartSortOrder === 'alpha-asc') cRMonto.sort((a, b) => a.localeCompare(b));
+            else if (chartSortOrder === 'alpha-desc') cRMonto.sort((a, b) => b.localeCompare(a));
+            else if (chartSortOrder === 'cant-desc') cRMonto.sort((a, b) => data.filter(d => d.Contratista === b).reduce((sum, x) => sum + x.Monto, 0) - data.filter(d => d.Contratista === a).reduce((sum, x) => sum + x.Monto, 0));
+            else if (chartSortOrder === 'cant-asc') cRMonto.sort((a, b) => data.filter(d => d.Contratista === a).reduce((sum, x) => sum + x.Monto, 0) - data.filter(d => d.Contratista === b).reduce((sum, x) => sum + x.Monto, 0));
+
+            // --- GRÁFICO 1: Deptos (Cantidad) ---
+            const dF1 = formatFullDeptos(dRCant);
+            const f1 = dRCant.map(dep => data.filter(d => d.Depto === dep && d.Condicion === 'Fuera de Plazo').length);
+            const dn1 = dRCant.map(dep => data.filter(d => d.Depto === dep && d.Condicion !== 'Fuera de Plazo').length);
+            const tot1 = dRCant.map((_, i) => f1[i] + dn1[i]);
+            const maxT1 = Math.max(...tot1, 0);
 
             if (chartDeptoInstance) chartDeptoInstance.destroy();
             chartDeptoInstance = new Chart(document.getElementById('chartDepto').getContext('2d'), {
                 type: 'bar', plugins: [ChartDataLabels],
                 data: {
-                    labels: dF,
+                    labels: dF1,
                     datasets: [
-                        { label: 'Fuera de Plazo', data: f, backgroundColor: '#ef4444', borderRadius: 4 },
-                        { label: 'Dentro de Plazo', data: dn, backgroundColor: '#22c55e', borderRadius: 4 }
+                        { label: 'Fuera de Plazo', data: f1, backgroundColor: '#ef4444', borderRadius: 4 },
+                        { label: 'Dentro de Plazo', data: dn1, backgroundColor: '#22c55e', borderRadius: 4 }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { top: 25 } },
-                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT * 1.15 } },
+                    scales: { x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } }, y: { stacked: true, beginAtZero: true, suggestedMax: maxT1 * 1.15 } },
                     plugins: {
                         legend: { position: 'top' },
                         datalabels: {
@@ -816,16 +968,16 @@
                 }
             });
 
-            const cR = [...new Set(data.map(d => d.Contratista))];
-            const cc = cR.map(c => data.filter(d => d.Contratista === c).length);
-            const maxT2 = Math.max(...cc, 0);
+            // --- GRÁFICO 2: Contratistas (Cantidad) ---
+            const cc2 = cRCant.map(c => data.filter(d => d.Contratista === c).length);
+            const maxT2 = Math.max(...cc2, 0);
 
             if (chartContratistaInstance) chartContratistaInstance.destroy();
             chartContratistaInstance = new Chart(document.getElementById('chartContratista').getContext('2d'), {
                 type: 'bar', plugins: [ChartDataLabels],
                 data: {
-                    labels: cR.map(c => c.length > 20 ? c.substring(0, 18) + '...' : c),
-                    datasets: [{ label: 'Cant. Planos', data: cc, backgroundColor: '#3b82f6', borderRadius: 4 }]
+                    labels: cRCant.map(c => c.length > 20 ? c.substring(0, 18) + '...' : c),
+                    datasets: [{ label: 'Cant. Planos', data: cc2, backgroundColor: '#3b82f6', borderRadius: 4 }]
                 },
                 options: {
                     indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
@@ -838,19 +990,21 @@
                 }
             });
 
-            const mt = dR.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMT || 0), 0));
-            const mo = dR.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMO || 0), 0));
-            const tot2 = dR.map((_, i) => mt[i] + mo[i]);
-            const maxT3 = Math.max(...tot2, 0);
+            // --- GRÁFICO 3: Deptos (Monto) ---
+            const dF3 = formatFullDeptos(dRMonto);
+            const mt3 = dRMonto.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMT || 0), 0));
+            const mo3 = dRMonto.map(dep => data.filter(d => d.Depto === dep).reduce((a, b) => a + (b.MontoMO || 0), 0));
+            const tot3 = dRMonto.map((_, i) => mt3[i] + mo3[i]);
+            const maxT3 = Math.max(...tot3, 0);
 
             if (chartMontoDeptoInstance) chartMontoDeptoInstance.destroy();
             chartMontoDeptoInstance = new Chart(document.getElementById('chartMontoDepto').getContext('2d'), {
                 type: 'bar', plugins: [ChartDataLabels],
                 data: {
-                    labels: dF,
+                    labels: dF3,
                     datasets: [
-                        { label: 'Materiales (MT)', data: mt, backgroundColor: '#a855f7', borderRadius: 4 },
-                        { label: 'Mano de Obra (MO)', data: mo, backgroundColor: '#3b82f6', borderRadius: 4 }
+                        { label: 'Materiales (MT)', data: mt3, backgroundColor: '#a855f7', borderRadius: 4 },
+                        { label: 'Mano de Obra (MO)', data: mo3, backgroundColor: '#3b82f6', borderRadius: 4 }
                     ]
                 },
                 options: {
@@ -874,19 +1028,20 @@
                 }
             });
 
-            const mt2 = cR.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMT || 0), 0));
-            const mo2 = cR.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMO || 0), 0));
-            const tot3 = cR.map((_, i) => mt2[i] + mo2[i]);
-            const maxT4 = Math.max(...tot3, 0);
+            // --- GRÁFICO 4: Contratistas (Monto) ---
+            const mt4 = cRMonto.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMT || 0), 0));
+            const mo4 = cRMonto.map(c => data.filter(d => d.Contratista === c).reduce((a, b) => a + (b.MontoMO || 0), 0));
+            const tot4 = cRMonto.map((_, i) => mt4[i] + mo4[i]);
+            const maxT4 = Math.max(...tot4, 0);
 
             if (chartMontoContraInstance) chartMontoContraInstance.destroy();
             chartMontoContraInstance = new Chart(document.getElementById('chartMontoContra').getContext('2d'), {
                 type: 'bar', plugins: [ChartDataLabels],
                 data: {
-                    labels: cR.map(c => c.length > 18 ? c.substring(0, 16) + '...' : c),
+                    labels: cRMonto.map(c => c.length > 18 ? c.substring(0, 16) + '...' : c),
                     datasets: [
-                        { label: 'Materiales (MT)', data: mt2, backgroundColor: '#a855f7', borderRadius: 4 },
-                        { label: 'Mano de Obra (MO)', data: mo2, backgroundColor: '#3b82f6', borderRadius: 4 }
+                        { label: 'Materiales (MT)', data: mt4, backgroundColor: '#a855f7', borderRadius: 4 },
+                        { label: 'Mano de Obra (MO)', data: mo4, backgroundColor: '#3b82f6', borderRadius: 4 }
                     ]
                 },
                 options: {
@@ -1168,13 +1323,13 @@
             const fechaGen = new Date().toLocaleString('es-PE', { hour12: false });
 
             const d = document.getElementById('filterDepto').value;
-            const c = document.getElementById('filterContratista').value;
             const r = document.getElementById('filterResponsable').value;
+            const c = document.getElementById('filterContratista').value;
             const p = document.getElementById('filterPlazo').value;
             const pills = [];
             if (d !== 'ALL') pills.push(`Depto: ${d}`);
-            if (c !== 'ALL') pills.push(`Contratista: ${c}`);
             if (r !== 'ALL') pills.push(`Responsable: ${r}`);
+            if (c !== 'ALL') pills.push(`Contratista: ${c}`);
             if (p !== 'ALL') pills.push(`Condición: ${p}`);
 
             const filtroHtml = pills.length > 0
@@ -1299,7 +1454,6 @@
             return `
             <div id="summaryCapture" style="width:1800px;padding:50px;background:#f8fafc;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;color:#0f172a;box-sizing:border-box;">
                 
-                <!-- HEADER -->
                 <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#fff;padding:40px;border-radius:24px;margin-bottom:32px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 10px 25px rgba(0,0,0,0.1);">
                     <div>
                         <div style="font-size:36px;font-weight:800;letter-spacing:-1px;">Control de Planos Pendientes</div>
@@ -1312,7 +1466,6 @@
                     </div>
                 </div>
 
-                <!-- KPIs -->
                 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-bottom:36px;">
                     <div style="background:#fff;border:1px solid #e2e8f0;border-left:6px solid #2563eb;border-radius:20px;padding:24px;box-shadow:0 4px 6px rgba(0,0,0,0.02);">
                         <div style="font-size:14px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Total Pendientes</div>
@@ -1335,13 +1488,12 @@
                     </div>
                 </div>
 
-                <!-- CUERPO DEL REPORTE JERÁRQUICO -->
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:start;width:100%;">
                     ${reporteHtml}
                 </div>
 
                 <div style="text-align:center;font-size:14px;color:#94a3b8;padding-top:24px;border-top:1px solid #e2e8f0;margin-top:36px;">
-                    Reporte generado el ${fechaGen} · Fuente: Pestaña "Fuente" (Google Sheets/Excel) · Dashboard Control de Planos Pendientes
+                    Reporte generado el ${fechaGen} · Fuente: Hoja "Base Datos" (Google Sheets/Excel) · Dashboard Control de Planos Pendientes
                 </div>
             </div>`;
         }
